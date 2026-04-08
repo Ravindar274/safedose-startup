@@ -6,6 +6,7 @@ import Patient    from '../models/Patient.js';
 import Medication from '../models/Medication.js';
 
 import User       from '../models/User.js';
+import { getPatientAdherenceSummary } from '../lib/adherence.js';
 import { searchOpenFDADrugs, validateOpenFDADrugSelection } from '../lib/openfda.js';
 
 const router = Router();
@@ -61,6 +62,21 @@ router.get('/drugs', async (req, res) => {
   } catch (err) {
     console.error('[GET PATIENT DRUGS]', err);
     return res.status(502).json({ error: 'OpenFDA request failed.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/patient/adherence
+// Returns historical adherence trends for the logged-in patient.
+// ─────────────────────────────────────────────────────────────
+router.get('/adherence', async (req, res) => {
+  try {
+    const patient = await getOrCreatePatient(req.user.userId);
+    const summary = await getPatientAdherenceSummary(patient._id, req.query.days);
+    return res.json(summary);
+  } catch (err) {
+    console.error('[GET PATIENT ADHERENCE]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
   }
 });
 

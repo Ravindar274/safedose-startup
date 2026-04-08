@@ -314,7 +314,6 @@ function AddMedicationModal({ onClose, onSaved }) {
                 value={form.selectedDrug?.genericName || ''}
                 placeholder="Selected automatically from FDA"
                 readOnly
-                required
               />
             </div>
           </div>
