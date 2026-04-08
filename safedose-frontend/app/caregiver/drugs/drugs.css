@@ -1,0 +1,217 @@
+/* app/caregiver/drugs/drugs.css */
+
+/* ── Search bar row ── */
+.drug-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.drug-total-lbl {
+  font-size: 13px;
+  color: var(--gray400);
+  flex-shrink: 0;
+}
+
+/* ── Drug grid ── */
+.drug-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+/* ── Drug card ── */
+.drug-card {
+  background: #fff;
+  border: 1px solid var(--gray200);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.drug-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.07);
+  border-color: var(--gray300);
+}
+
+.drug-card-top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.drug-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.drug-card-head {
+  flex: 1;
+  min-width: 0;
+}
+
+.drug-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy);
+  margin: 0 0 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+}
+
+.drug-card-generic {
+  font-size: 12px;
+  color: var(--gray400);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+}
+
+/* ── Meta chips ── */
+.drug-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.drug-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--teal-soft);
+  color: var(--teal2);
+  text-transform: capitalize;
+}
+
+.drug-chip--muted {
+  background: var(--gray100);
+  color: var(--gray600);
+  font-weight: 400;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Indication snippet ── */
+.drug-card-indication {
+  font-size: 12px;
+  color: var(--gray400);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+}
+
+/* ── Add button ── */
+.drug-card-add {
+  margin-top: auto;
+  font-size: 13px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  width: 100%;
+  justify-content: center;
+}
+
+/* ── Pagination ── */
+.drug-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 4px 0 20px;
+}
+
+.drug-page-lbl {
+  font-size: 13px;
+  color: var(--gray600);
+  font-weight: 500;
+  min-width: 100px;
+  text-align: center;
+}
+
+/* ── State placeholders ── */
+.drug-loading,
+.drug-empty {
+  text-align: center;
+  font-size: 14px;
+  color: var(--gray400);
+  padding: 72px 0;
+}
+
+.drug-empty-icon {
+  margin: 0 auto 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--gray100);
+  color: var(--gray400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Success banner ── */
+.drug-success-banner {
+  background: var(--safe-soft);
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Schedule times grid in modal ── */
+.drug-times-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+/* ── Checkbox row in modal (form-grp-check) ── */
+.form-grp-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-grp-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--teal);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.form-grp-check label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray800);
+  margin: 0;
+  cursor: pointer;
+}

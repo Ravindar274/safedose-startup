@@ -493,4 +493,54 @@ router.delete('/patients/:id', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
+// GET /api/caregiver/drugs
+// Proxies to the OpenFDA drug label API with search + pagination.
+// Query params: q (search text), skip (offset), limit (page size)
+// ─────────────────────────────────────────────────────────────
+router.get('/drugs', async (req, res) => {
+  try {
+    const q     = (req.query.q || '').trim();
+    const skip  = Math.max(0, parseInt(req.query.skip,  10) || 0);
+    const limit = Math.min(24, Math.max(1, parseInt(req.query.limit, 10) || 12));
+
+    const apiKey = process.env.OPENFDA_API_KEY || '';
+
+    let url = `https://api.fda.gov/drug/label.json?limit=${limit}&skip=${skip}`;
+    if (apiKey) url += `&api_key=${encodeURIComponent(apiKey)}`;
+
+    if (q) {
+      // Space-separated clauses = Lucene OR; encodeURIComponent keeps spaces as %20
+      const searchVal = `openfda.brand_name:"${q}" openfda.generic_name:"${q}"`;
+      url += `&search=${encodeURIComponent(searchVal)}`;
+    }
+
+    const fdaRes = await fetch(url);
+
+    if (fdaRes.status === 404) {
+      return res.json({ drugs: [], total: 0 });
+    }
+    if (!fdaRes.ok) {
+      return res.status(502).json({ error: 'OpenFDA request failed.' });
+    }
+
+    const data  = await fdaRes.json();
+    const total = data.meta?.results?.total ?? 0;
+
+    const drugs = (data.results || []).map(r => ({
+      id:           r.openfda?.package_ndc?.[0]        ?? '',
+      brandName:    (r.openfda?.brand_name?.[0]        ?? 'Unknown').replace(/_/g, ' '),
+      genericName:  (r.openfda?.generic_name?.[0]      ?? '').replace(/_/g, ' '),
+      manufacturer: (r.openfda?.manufacturer_name?.[0] ?? ''),
+      route:        (r.openfda?.route?.[0]              ?? '').toLowerCase(),
+      indication:   (r.indications_and_usage?.[0]      ?? '').slice(0, 220),
+    }));
+
+    return res.json({ drugs, total });
+  } catch (err) {
+    console.error('[GET DRUGS ERROR]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 export default router;
