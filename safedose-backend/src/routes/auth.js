@@ -17,10 +17,13 @@ const COOKIE_OPTS = {
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { firstName, lastName, email, password, confirmPassword, role } = req.body;
+    const { 
+      firstName, lastName, email, password, confirmPassword, role,
+      dateOfBirth, gender, qualification, experienceYears, specialization, availability, licenseId, languagesSpoken
+    } = req.body;
 
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({ error: 'All fields are required.' });
+    if (!firstName || !lastName || !email || !password || !dateOfBirth || !gender) {
+      return res.status(400).json({ error: 'Core fields including Date of Birth and Gender are required.' });
     }
 
     if (password !== confirmPassword) {
@@ -41,7 +44,24 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'Email already registered.' });
     }
 
-    const user = await User.create({ firstName, lastName, email, password, role: assignedRole });
+    const userData = { 
+      firstName, lastName, email, password, role: assignedRole,
+      dateOfBirth, gender
+    };
+
+    if (assignedRole === 'caregiver') {
+      userData.status = 'pending';
+      userData.caregiverProfile = {
+        qualification,
+        experienceYears: experienceYears ? Number(experienceYears) : undefined,
+        specialization,
+        availability,
+        licenseId,
+        languagesSpoken
+      };
+    }
+
+    const user = await User.create(userData);
 
     return res.status(201).json({ message: 'Account created successfully.', userId: user._id });
   } catch (err) {
@@ -67,6 +87,13 @@ router.post('/login', async (req, res) => {
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    if (user.status === 'pending') {
+      return res.status(403).json({ error: 'Your account is pending admin approval.' });
+    }
+    if (user.status === 'rejected') {
+      return res.status(403).json({ error: 'Your account registration was rejected.' });
     }
 
     const token = signToken({
