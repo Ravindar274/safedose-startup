@@ -1,0 +1,109 @@
+/* app/patient/profile/profile.css */
+
+.profile-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.profile-card {
+  background: #fff;
+  border: 1px solid var(--gray200);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--gray100);
+}
+
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--teal-soft);
+  color: var(--teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.profile-title h3 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  color: var(--navy);
+}
+
+.profile-title p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--gray500);
+}
+
+.profile-form .form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.profile-form .form-grp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-form .form-grp label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.profile-form .form-grp input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--gray200);
+  border-radius: 12px;
+  background: var(--gray50);
+  color: var(--gray800);
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.profile-form .form-grp input:focus {
+  border-color: var(--teal);
+  background: #fff;
+}
+
+.profile-form .form-grp input:disabled {
+  background: var(--gray100);
+  color: var(--gray500);
+  cursor: not-allowed;
+  border-color: var(--gray200);
+}
+
+.profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--gray100);
+}
+
+.btn-edit {
+  background: var(--gray100);
+  color: var(--navy);
+}
+
+.btn-edit:hover {
+  background: var(--gray200);
+}

@@ -1,0 +1,235 @@
+/* ══════════════════════════════════════════
+   PATIENT DASHBOARD — Medication Schedule
+══════════════════════════════════════════ */
+
+/* ── Form helpers ── */
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.form-grp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.form-grp label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.form-grp input,
+.form-grp select {
+  width: 100%;
+  border: 1.5px solid var(--gray200);
+  border-radius: 12px;
+  padding: 11px 14px;
+  background: var(--gray50);
+  color: var(--gray800);
+  font-size: 14px;
+  font-family: var(--font-body), sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.form-grp input:focus,
+.form-grp select:focus {
+  border-color: var(--teal);
+  background: #fff;
+}
+
+.form-grp-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-grp-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--teal);
+  flex-shrink: 0;
+}
+
+.form-grp-check label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray800);
+  margin: 0;
+}
+
+.form-error {
+  font-size: 13px;
+  color: var(--danger);
+  margin: 0 0 12px;
+}
+
+/* ── btn helpers ── */
+.btn-full { width: 100%; justify-content: center; }
+.btn { display: inline-flex; align-items: center; gap: 6px;
+       padding: 10px 18px; border-radius: 10px; font-size: 13px;
+       font-weight: 600; cursor: pointer; border: none; }
+.btn-teal { background: var(--teal); color: #fff; }
+.btn-teal:hover { opacity: 0.9; }
+
+/* ── Stat card progress bar ── */
+.stat-val-total {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--gray400);
+}
+
+.stat-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--gray100);
+  border-radius: 99px;
+  overflow: hidden;
+  margin: 6px 0 2px;
+}
+
+.stat-progress-bar {
+  height: 100%;
+  background: var(--teal);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+  min-width: 0%;
+}
+
+/* ── Med row ── */
+.med-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--gray100);
+}
+
+.med-row:last-child { border-bottom: none; }
+
+.med-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s;
+}
+
+.med-icon--done {
+  background: var(--safe-soft);
+  color: #065f46;
+}
+
+.med-icon--missed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.med-info { flex: 1; min-width: 0; }
+
+.med-name { font-size: 14px; font-weight: 600; color: var(--navy); }
+.med-generic { font-weight: 400; color: var(--gray400); font-size: 13px; }
+.med-dose { font-size: 12px; color: var(--gray400); margin-top: 2px; }
+
+.med-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray600);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+/* ── Mark taken actions wrapper ── */
+.med-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ── Mark taken button ── */
+.mark-taken-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid var(--gray200);
+  background: #fff;
+  color: var(--gray600);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.mark-taken-btn:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.mark-taken-btn--done {
+  background: var(--safe-soft);
+  border-color: transparent;
+  color: #065f46;
+}
+
+.mark-taken-btn--done:hover {
+  background: #d1fae5;
+  border-color: transparent;
+  color: #065f46;
+}
+
+.mark-taken-btn--due {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: #92400e;
+}
+
+.mark-taken-btn--due:hover {
+  background: #fef3c7;
+  border-color: var(--warn);
+  color: #92400e;
+}
+
+.mark-taken-btn--missed {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mark-taken-btn--missed:hover {
+  background: #fee2e2;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mark-taken-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Empty state ── */
+.empty-meds {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 0;
+  color: var(--gray400);
+  text-align: center;
+}
+
+.empty-meds p {
+  font-size: 13px;
+  margin: 0;
+}
