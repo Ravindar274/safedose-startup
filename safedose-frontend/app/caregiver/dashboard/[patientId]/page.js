@@ -3,6 +3,7 @@
 'use client';
 import '../../../patient/patient-dashboard.css';
 import '../../../patient/medications/medications.css';
+import '../../caregiver-dashboard.css';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 

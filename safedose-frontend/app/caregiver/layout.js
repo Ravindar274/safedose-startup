@@ -4,7 +4,7 @@
 import '../app.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AuthProvider } from '../context/AuthContext';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import ChatFab from '../components/ChatFab';
 
 const navItems = [
@@ -47,8 +47,15 @@ const navItems = [
   },
 ];
 
-export default function CaregiverLayout({ children }) {
+function CaregiverShell({ children }) {
   const pathname = usePathname();
+  const { user } = useAuth();
+
+  const fullName = user ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() : '';
+  const initials = fullName
+    ? fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    : '?';
+  const roleLabel = user?.role ?? 'caregiver';
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -56,7 +63,6 @@ export default function CaregiverLayout({ children }) {
   }
 
   return (
-    <AuthProvider>
     <div className="app-layout">
 
       {/* ── Sidebar ── */}
@@ -68,10 +74,10 @@ export default function CaregiverLayout({ children }) {
 
         {/* User info */}
         <div className="sb-user">
-          <div className="sb-avatar">RC</div>
+          <div className="sb-avatar">{initials}</div>
           <div>
-            <p className="sb-user-name">Ravindar Caregiver</p>
-            <p className="sb-user-role">caregiver</p>
+            <p className="sb-user-name">{fullName || 'Loading…'}</p>
+            <p className="sb-user-role">{roleLabel}</p>
           </div>
         </div>
 
@@ -112,7 +118,14 @@ export default function CaregiverLayout({ children }) {
       </div>
 
     </div>
-    <ChatFab />
+  );
+}
+
+export default function CaregiverLayout({ children }) {
+  return (
+    <AuthProvider>
+      <CaregiverShell>{children}</CaregiverShell>
+      <ChatFab />
     </AuthProvider>
   );
 }
