@@ -6,6 +6,7 @@ import Patient    from '../models/Patient.js';
 import Medication from '../models/Medication.js';
 
 import User       from '../models/User.js';
+import { searchOpenFDADrugs, validateOpenFDADrugSelection } from '../lib/openfda.js';
 
 const router = Router();
 
@@ -47,6 +48,21 @@ function doseCount(frequency) {
   };
   return map[frequency] ?? 1;
 }
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/patient/drugs
+// Search OpenFDA by brand or generic name for patient add flow.
+// ─────────────────────────────────────────────────────────────
+router.get('/drugs', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    const { drugs, total } = await searchOpenFDADrugs(q, req.query.skip, req.query.limit);
+    return res.json({ drugs, total });
+  } catch (err) {
+    console.error('[GET PATIENT DRUGS]', err);
+    return res.status(502).json({ error: 'OpenFDA request failed.' });
+  }
+});
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/patient/medications/today
@@ -138,12 +154,17 @@ router.get('/medications', async (req, res) => {
 router.post('/medications', async (req, res) => {
   try {
     const {
-      name, genericName, dosage, frequency,
+      selectedDrug, dosage, frequency,
       scheduleTimes, isOngoing, startDate, endDate,
     } = req.body;
 
-    if (!name || !genericName || !dosage || !frequency || !scheduleTimes || !scheduleTimes.length) {
+    if (!selectedDrug?.brandName || !dosage || !frequency || !scheduleTimes || !scheduleTimes.length) {
       return res.status(400).json({ error: 'All required fields must be filled.' });
+    }
+
+    const matchedDrug = await validateOpenFDADrugSelection(selectedDrug);
+    if (!matchedDrug) {
+      return res.status(400).json({ error: 'Please choose a medication from the FDA search results.' });
     }
 
     const patient = await getOrCreatePatient(req.user.userId);
@@ -151,11 +172,12 @@ router.post('/medications', async (req, res) => {
     const medication = await Medication.create({
       patientId:    patient._id,
       addedBy:      req.user.userId,
-      name,
-      genericName,
+      name:         matchedDrug.brandName,
+      genericName:  matchedDrug.genericName || matchedDrug.brandName,
       dosage,
       frequency,
       scheduleTimes,
+      rxcui:        matchedDrug.rxcui || '',
       isOngoing:    isOngoing ?? true,
       startDate:    startDate   ? new Date(startDate)  : new Date(),
       endDate:      (!isOngoing && endDate) ? new Date(endDate) : null,
@@ -218,13 +240,11 @@ router.patch('/medications/:id/taken', async (req, res) => {
 router.put('/medications/:id', async (req, res) => {
   try {
     const patient = await getOrCreatePatient(req.user.userId);
-    const { name, genericName, dosage, frequency, scheduleTimes, isOngoing, startDate, endDate } = req.body;
+    const { dosage, frequency, scheduleTimes, isOngoing, startDate, endDate } = req.body;
 
     const med = await Medication.findOne({ _id: req.params.id, patientId: patient._id });
     if (!med) return res.status(404).json({ error: 'Medication not found.' });
 
-    if (name !== undefined) med.name = name;
-    if (genericName !== undefined) med.genericName = genericName;
     if (dosage !== undefined) med.dosage = dosage;
     if (frequency !== undefined) med.frequency = frequency;
     if (scheduleTimes !== undefined) med.scheduleTimes = scheduleTimes;

@@ -2,7 +2,7 @@
 
 'use client';
 import '../patient-dashboard.css';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import NotificationBell from '../../components/NotificationBell';
 
 const FREQUENCIES = [
@@ -14,6 +14,16 @@ const FREQUENCIES = [
   'once every 3 days',
   'once in a week'
 ];
+
+const FREQUENCY_COUNTS = {
+  'once daily': 1,
+  'twice daily': 2,
+  'three times daily': 3,
+  'four times daily': 4,
+  'once every 2 days': 1,
+  'once every 3 days': 1,
+  'once in a week': 1,
+};
 
 // ── Parse "08:00 AM" → Date with today's date ────────────────
 function parseTime(timeStr) {
@@ -64,8 +74,7 @@ function getMedStatus(med) {
 // ── Add Medication Modal ──────────────────────────────────────
 function AddMedicationModal({ onClose, onSaved }) {
   const [form, setForm] = useState({
-    name:         '',
-    genericName:  '',
+    selectedDrug: null,
     dosage:       '',
     frequency:    'once daily',
     scheduleTimes: ['08:00 AM'],
@@ -73,8 +82,57 @@ function AddMedicationModal({ onClose, onSaved }) {
     startDate:    new Date().toISOString().slice(0, 10),
     endDate:      '',
   });
+  const [brandQuery, setBrandQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  const lookupRef = useRef(null);
+
+  useEffect(() => {
+    function handleOutsideClick(event) {
+      if (!lookupRef.current?.contains(event.target)) {
+        setShowResults(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    const query = brandQuery.trim();
+    if (!query) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const params = new URLSearchParams({ q: query, limit: '8', skip: '0' });
+        const res = await fetch(`/api/patient/drugs?${params}`, { signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok) {
+          setSearchResults([]);
+          return;
+        }
+        setSearchResults(data.drugs || []);
+      } catch (fetchError) {
+        if (fetchError.name !== 'AbortError') setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [brandQuery]);
 
   function generateTimes(firstTimeStr, count) {
     if (count <= 1) return [firstTimeStr || '08:00 AM'];
@@ -101,8 +159,7 @@ function AddMedicationModal({ onClose, onSaved }) {
   function handleChange(e) {
     const { name, value, type, checked } = e.target;
     if (name === 'frequency') {
-      const counts = { 'once daily': 1, 'twice daily': 2, 'three times daily': 3, 'four times daily': 4 };
-      const count = counts[value] || 1;
+      const count = FREQUENCY_COUNTS[value] || 1;
       setForm(prev => {
         const newTimes = generateTimes(prev.scheduleTimes[0] || '08:00 AM', count);
         return { ...prev, frequency: value, scheduleTimes: newTimes };
@@ -120,8 +177,7 @@ function AddMedicationModal({ onClose, onSaved }) {
     const formatted = `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${period}`;
     setForm(prev => {
       if (index === 0) {
-        const counts = { 'once daily': 1, 'twice daily': 2, 'three times daily': 3, 'four times daily': 4 };
-        const count = counts[prev.frequency] || 1;
+        const count = FREQUENCY_COUNTS[prev.frequency] || 1;
         const newTimes = generateTimes(formatted, count);
         return { ...prev, scheduleTimes: newTimes };
       } else {
@@ -142,15 +198,49 @@ function AddMedicationModal({ onClose, onSaved }) {
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
   }
 
+  function handleBrandInput(value) {
+    setBrandQuery(value);
+    setShowResults(true);
+    setError('');
+    setForm(prev => ({
+      ...prev,
+      selectedDrug:
+        prev.selectedDrug && prev.selectedDrug.brandName.toLowerCase() === value.trim().toLowerCase()
+          ? prev.selectedDrug
+          : null,
+    }));
+  }
+
+  function handleDrugSelect(drug) {
+    setBrandQuery(drug.brandName);
+    setShowResults(false);
+    setError('');
+    setForm(prev => ({ ...prev, selectedDrug: drug }));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+
+    if (!form.selectedDrug || form.selectedDrug.brandName.toLowerCase() !== brandQuery.trim().toLowerCase()) {
+      setError('Select a medication from the brand name search results.');
+      return;
+    }
+
     setLoading(true);
     try {
       const res  = await fetch('/api/patient/medications', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(form),
+        body:    JSON.stringify({
+          selectedDrug: form.selectedDrug,
+          dosage: form.dosage,
+          frequency: form.frequency,
+          scheduleTimes: form.scheduleTimes,
+          isOngoing: form.isOngoing,
+          startDate: form.startDate,
+          endDate: form.endDate,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to add medication.'); return; }
@@ -182,15 +272,50 @@ function AddMedicationModal({ onClose, onSaved }) {
 
         <form onSubmit={handleSubmit}>
           <div className="form-row-2">
-            <div className="form-grp">
+            <div className="form-grp" ref={lookupRef}>
               <label>Brand name *</label>
-              <input name="name" placeholder="e.g. Tylenol" value={form.name}
-                     onChange={handleChange} required />
+              <input
+                name="brandName"
+                placeholder="Search brand name, e.g. Tylenol"
+                value={brandQuery}
+                onChange={e => handleBrandInput(e.target.value)}
+                onFocus={() => setShowResults(true)}
+                autoComplete="off"
+                required
+              />
+              <p className="form-hint">Choose a medication from the FDA results below.</p>
+              {showResults && brandQuery.trim() && (
+                <div className="drug-lookup-results">
+                  {searchLoading ? (
+                    <div className="drug-lookup-row drug-lookup-row--muted">Searching FDA results…</div>
+                  ) : searchResults.length > 0 ? (
+                    searchResults.map(drug => (
+                      <button
+                        key={`${drug.id}-${drug.brandName}-${drug.genericName}`}
+                        type="button"
+                        className="drug-lookup-row"
+                        onClick={() => handleDrugSelect(drug)}
+                      >
+                        <span className="drug-lookup-title">{drug.brandName}</span>
+                        <span className="drug-lookup-sub">
+                          {drug.genericName || 'Generic name unavailable'}
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="drug-lookup-row drug-lookup-row--muted">No FDA matches found.</div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="form-grp">
               <label>Generic name *</label>
-              <input name="genericName" placeholder="e.g. Acetaminophen" value={form.genericName}
-                     onChange={handleChange} required />
+              <input
+                value={form.selectedDrug?.genericName || ''}
+                placeholder="Selected automatically from FDA"
+                readOnly
+                required
+              />
             </div>
           </div>
 
