@@ -6,6 +6,8 @@ import Assignment from '../models/Assignment.js';
 import Patient    from '../models/Patient.js';
 import User       from '../models/User.js';
 import Medication from '../models/Medication.js';
+import { getCaregiverRosterAdherenceSummary, getPatientAdherenceSummary } from '../lib/adherence.js';
+import { searchOpenFDADrugs } from '../lib/openfda.js';
 
 const router = Router();
 
@@ -134,6 +136,57 @@ router.get('/patients/:id', async (req, res) => {
     return res.json({ patient: { ...patient.toObject(), assignmentRole: assignment.role } });
   } catch (err) {
     console.error('[GET PATIENT ERROR]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/caregiver/adherence
+// Returns adherence overview across the caregiver's roster.
+// ─────────────────────────────────────────────────────────────
+router.get('/adherence', async (req, res) => {
+  try {
+    const assignments = await Assignment.find({ caregiverId: req.user.userId }).populate('patientId');
+    const validAssignments = assignments.filter((item) => item.patientId);
+    const patientIds = validAssignments.map((item) => item.patientId._id);
+    const patientMeta = new Map(
+      validAssignments.map((item) => [
+        String(item.patientId._id),
+        `${item.patientId.firstName || ''} ${item.patientId.lastName || ''}`.trim() || 'Unknown patient',
+      ])
+    );
+
+    const summary = await getCaregiverRosterAdherenceSummary(patientIds, patientMeta, req.query.days);
+    return res.json(summary);
+  } catch (err) {
+    console.error('[GET CAREGIVER ADHERENCE]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/caregiver/patients/:id/adherence
+// Returns historical adherence trends for one assigned patient.
+// ─────────────────────────────────────────────────────────────
+router.get('/patients/:id/adherence', async (req, res) => {
+  try {
+    const assignment = await getAssignment(req.user.userId, req.params.id);
+    if (!assignment) return res.status(404).json({ error: 'Patient not found.' });
+
+    const patient = await Patient.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'Patient not found.' });
+
+    const summary = await getPatientAdherenceSummary(req.params.id, req.query.days);
+    return res.json({
+      patient: {
+        _id: patient._id,
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+      },
+      ...summary,
+    });
+  } catch (err) {
+    console.error('[GET CAREGIVER PATIENT ADHERENCE]', err);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -490,6 +543,22 @@ router.delete('/patients/:id', async (req, res) => {
   } catch (err) {
     console.error('[DELETE PATIENT ERROR]', err);
     return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/caregiver/drugs
+// Proxies to the OpenFDA drug label API with search + pagination.
+// Query params: q (search text), skip (offset), limit (page size)
+// ─────────────────────────────────────────────────────────────
+router.get('/drugs', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    const { drugs, total } = await searchOpenFDADrugs(q, req.query.skip, req.query.limit);
+    return res.json({ drugs, total });
+  } catch (err) {
+    console.error('[GET DRUGS ERROR]', err);
+    return res.status(502).json({ error: 'OpenFDA request failed.' });
   }
 });
 
