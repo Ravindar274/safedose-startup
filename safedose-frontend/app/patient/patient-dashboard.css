@@ -22,6 +22,12 @@
   color: var(--navy);
 }
 
+.form-hint {
+  font-size: 12px;
+  color: var(--gray400);
+  margin: 6px 0 0;
+}
+
 .form-grp input,
 .form-grp select {
   width: 100%;
@@ -41,6 +47,58 @@
 .form-grp select:focus {
   border-color: var(--teal);
   background: #fff;
+}
+
+.drug-lookup-results {
+  margin-top: 8px;
+  border: 1px solid var(--gray200);
+  border-radius: 12px;
+  background: #fff;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.drug-lookup-row {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid var(--gray100);
+}
+
+.drug-lookup-row:last-child {
+  border-bottom: none;
+}
+
+.drug-lookup-row:hover {
+  background: var(--gray50);
+}
+
+.drug-lookup-row--muted {
+  color: var(--gray400);
+  cursor: default;
+}
+
+.drug-lookup-row--muted:hover {
+  background: transparent;
+}
+
+.drug-lookup-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.drug-lookup-sub {
+  font-size: 12px;
+  color: var(--gray400);
 }
 
 .form-grp-check {

@@ -89,11 +89,12 @@ function EditMedicationModal({ med, onClose, onSaved }) {
           <div className="form-row-2">
             <div className="form-grp">
               <label>Brand Name</label>
-              <input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+              <input required value={form.name} readOnly />
+              <span className="form-hint">Locked to the FDA-selected medication.</span>
             </div>
             <div className="form-grp">
               <label>Generic Name</label>
-              <input required value={form.genericName} onChange={e => setForm({...form, genericName: e.target.value})} />
+              <input required value={form.genericName} readOnly />
             </div>
           </div>
 
