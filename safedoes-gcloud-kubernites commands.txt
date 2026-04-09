@@ -1,0 +1,53 @@
+gcloud artifacts repositories create safedose-node-apps-repo --repository-format=docker --location=us-central1 --description="Docker repository for my two Node apps"
+
+
+gcloud projects add-iam-policy-binding safedose-medtracker `
+    --member="serviceAccount:723412178093-compute@developer.gserviceaccount.com" `
+    --role="roles/storage.admin"
+	
+gcloud projects add-iam-policy-binding safedose-medtracker `
+    --member="serviceAccount:723412178093-compute@developer.gserviceaccount.com" `
+    --role="roles/cloudbuild.builds.builder"
+
+	
+gcloud builds submit --tag us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-backend-image:v1 .
+
+gcloud container clusters create-auto safedose-cluster `
+    --location us-central1
+	
+gcloud container clusters get-credentials safedose-cluster --location us-central1
+
+kubectl create secret generic safedose-secrets `
+
+    --from-literal=GEMINI_API_KEY=AIzaSyDuIhzcwCM3Cz6MF_wHm2h_PFuJX6jS5os`
+
+    --from-literal=MONGODB_URI="mongodb+srv://admin:12345@cluster0.msd5ckv.mongodb.net/safedose?retryWrites=true&w=majority" `
+
+    --from-literal=JWT_SECRET="0d16a23790fc49d8dc2271a259a0a833928be411f5ee15de0e5e9919bec3fee3305029aa92880bb34c0c4a6cf2812a3a51da2c8d536d54cb65095bc608b02902" `
+
+    --dry-run=client -o yaml | kubectl apply -f -
+	
+	
+
+kubectl apply -f backend-deploy.yaml
+
+kubectl apply -f chat-deploy.yaml
+
+
+#check status
+kubectl get pods
+
+#get your Public IP
+kubectl get service backend-service
+
+#check secrets
+kubectl get secret safedose-secrets -o yaml
+
+# 2. Create the gateway and routes
+kubectl apply -f safedose-gateway.yaml
+kubectl apply -f safedose-routes.yaml
+
+NEXT_PUBLIC_CHAT_API_URL
+NEXT_PUBLIC_API_URL
+
+

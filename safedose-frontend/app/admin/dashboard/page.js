@@ -261,6 +261,20 @@ export default function AdminDashboard() {
     setDeleteTarget(null);
   }
 
+  async function handleUpdateStatus(id, newStatus) {
+    try {
+      const res = await fetch(`/api/admin/caregivers/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+        credentials: 'include'
+      });
+      if (res.ok) {
+        setCaregivers(prev => prev.map(c => c._id === id ? { ...c, status: newStatus } : c));
+      }
+    } catch(err) { console.error(err); }
+  }
+
   return (
     <>
       {/* ── Topbar ── */}
@@ -443,7 +457,7 @@ export default function AdminDashboard() {
                   <thead>
                     <tr>
                       <th>Caregiver</th>
-                      <th>Role</th>
+                      <th>Status</th>
                       <th>Patients assigned</th>
                       <th>Member since</th>
                       <th>Actions</th>
@@ -461,11 +475,25 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                         </td>
-                        <td><span className="admin-badge caregiver">Caregiver</span></td>
+                        <td>
+                          {c.status === 'pending' ? <span className="admin-badge" style={{background: '#f59e0b', color: '#fff', border: 'none'}}>Pending</span> :
+                           c.status === 'rejected' ? <span className="admin-badge" style={{background: '#ef4444', color: '#fff', border: 'none'}}>Rejected</span> :
+                           <span className="admin-badge caregiver">Active</span>}
+                        </td>
                         <td>{c.patientCount ?? 0}</td>
                         <td>{new Date(c.createdAt).toLocaleDateString()}</td>
                         <td>
                           <div className="admin-actions">
+                            {c.status === 'pending' && (
+                              <>
+                                <button className="admin-action-btn" style={{color: '#10b981', fontWeight: 600}} onClick={() => handleUpdateStatus(c._id, 'active')}>
+                                  Approve
+                                </button>
+                                <button className="admin-action-btn" style={{color: '#ef4444', fontWeight: 600}} onClick={() => handleUpdateStatus(c._id, 'rejected')}>
+                                  Reject
+                                </button>
+                              </>
+                            )}
                             <button className="admin-action-btn edit" onClick={() => setEditCaregiver(c)}>
                               <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
                                    strokeLinecap="round" strokeLinejoin="round" width="13" height="13">

@@ -40,7 +40,14 @@
   pointer-events: none;
   z-index: 999;
   white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+
+.chat-fab:hover ~ .chat-fab-tooltip {
   opacity: 0.9;
+  visibility: visible;
 }
 
 /* ── Chat window ─────────────────────────────────────────────────────────── */

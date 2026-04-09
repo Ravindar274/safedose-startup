@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: safedose-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: node-app
+        # Note the :v2 at the end of the image path
+        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-backend-image:v2
+        ports:
+        - containerPort: 8080
+        # Add your .env properties here
+        env:
+        - name: PORT
+          value: "8080"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: MONGODB_URI
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: JWT_SECRET
+        - name: CLIENT_ORIGIN
+          value: "https://safedose-jet.vercel.app" # This is how Backend finds Chat Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  type: ClusterIP 
+  selector:
+    app: backend
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080

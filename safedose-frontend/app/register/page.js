@@ -10,6 +10,8 @@ export default function RegisterPage() {
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: '',
     password: '', confirmPassword: '', role: 'patient',
+    dateOfBirth: '', gender: 'Male',
+    qualification: '', experienceYears: '', specialization: '', availability: 'full-time', licenseId: '', languagesSpoken: ''
   });
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
@@ -110,42 +112,103 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit}>
             <div className="form-row-2">
               <div className="form-grp">
-                <label htmlFor="firstName">First Name</label>
+                <label htmlFor="firstName">First Name <span style={{ color: 'red' }}>*</span></label>
                 <input id="firstName" name="firstName" type="text"
                   value={form.firstName} onChange={handleChange} required />
               </div>
               <div className="form-grp">
-                <label htmlFor="lastName">Last Name</label>
+                <label htmlFor="lastName">Last Name <span style={{ color: 'red' }}>*</span></label>
                 <input id="lastName" name="lastName" type="text"
                   value={form.lastName} onChange={handleChange} required />
               </div>
             </div>
 
             <div className="form-grp">
-              <label htmlFor="email">Email</label>
+              <label htmlFor="email">Email <span style={{ color: 'red' }}>*</span></label>
               <input id="email" name="email" type="email"
                 value={form.email} onChange={handleChange} required />
             </div>
 
             <div className="form-grp">
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">Password <span style={{ color: 'red' }}>*</span></label>
               <input id="password" name="password" type="password"
                 value={form.password} onChange={handleChange} required />
             </div>
 
             <div className="form-grp">
-              <label htmlFor="confirmPassword">Confirm Password</label>
+              <label htmlFor="confirmPassword">Confirm Password <span style={{ color: 'red' }}>*</span></label>
               <input id="confirmPassword" name="confirmPassword" type="password"
                 value={form.confirmPassword} onChange={handleChange} required />
             </div>
 
+            <div className="form-row-2">
+              <div className="form-grp">
+                <label htmlFor="dateOfBirth">Date of Birth <span style={{ color: 'red' }}>*</span></label>
+                <input id="dateOfBirth" name="dateOfBirth" type="date"
+                  value={form.dateOfBirth} onChange={handleChange} required />
+              </div>
+              <div className="form-grp">
+                <label htmlFor="gender">Gender <span style={{ color: 'red' }}>*</span></label>
+                <select id="gender" name="gender" value={form.gender} onChange={handleChange}>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </div>
+            </div>
+
             <div className="form-grp">
-              <label htmlFor="role">I am a</label>
+              <label htmlFor="role">I am a <span style={{ color: 'red' }}>*</span></label>
               <select id="role" name="role" value={form.role} onChange={handleChange}>
                 <option value="patient">Patient</option>
                 <option value="caregiver">Caregiver</option>
               </select>
             </div>
+
+            {form.role === 'caregiver' && (
+              <>
+                <div className="form-grp">
+                  <label htmlFor="qualification">Qualification / Certification <span style={{ color: 'red' }}>*</span></label>
+                  <input id="qualification" name="qualification" type="text"
+                    value={form.qualification} onChange={handleChange} required />
+                </div>
+                
+                <div className="form-grp">
+                  <label htmlFor="experienceYears">Experience (years) <span style={{ color: 'red' }}>*</span></label>
+                  <input id="experienceYears" name="experienceYears" type="number" min="0"
+                    value={form.experienceYears} onChange={handleChange} required />
+                </div>
+
+                <div className="form-grp">
+                  <label htmlFor="specialization">Specialization (e.g. elder care) <span style={{ color: 'red' }}>*</span></label>
+                  <input id="specialization" name="specialization" type="text"
+                    value={form.specialization} onChange={handleChange} required />
+                </div>
+
+                <div className="form-grp">
+                  <label htmlFor="availability">Availability <span style={{ color: 'red' }}>*</span></label>
+                  <select id="availability" name="availability" value={form.availability} onChange={handleChange}>
+                    <option value="full-time">Full-Time</option>
+                    <option value="part-time">Part-Time</option>
+                    <option value="schedule">Schedule</option>
+                  </select>
+                </div>
+
+                <div className="form-grp">
+                  <label htmlFor="licenseId">License ID <span style={{ color: 'red' }}>*</span></label>
+                  <input id="licenseId" name="licenseId" type="text"
+                    value={form.licenseId} onChange={handleChange} required />
+                </div>
+
+                <div className="form-grp">
+                  <label htmlFor="languagesSpoken">Languages Spoken <span style={{ color: 'red' }}>*</span></label>
+                  <input id="languagesSpoken" name="languagesSpoken" type="text"
+                    placeholder="English, Spanish..."
+                    value={form.languagesSpoken} onChange={handleChange} required />
+                </div>
+              </>
+            )}
 
             {error && <p className="form-error">{error}</p>}
 
