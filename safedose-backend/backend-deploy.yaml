@@ -15,7 +15,7 @@ spec:
       containers:
       - name: node-app
         # Note the :v2 at the end of the image path
-        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-backend-image:v2
+        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-backend-image:v3
         ports:
         - containerPort: 8080
         # Add your .env properties here

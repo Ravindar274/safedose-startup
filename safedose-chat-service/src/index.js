@@ -35,6 +35,9 @@ app.use('/api/chat', chatRouter);
 // ── Health check — useful for deployment monitoring ───────────────────────
 app.get('/health', (_, res) => res.json({ status: 'ok', service: 'safedose-chat' }));
 
+// ── root path ─────────────────────────────────────────────
+app.get('/', (_req, res) => res.json({ status: 'ok' }));
+
 // ── Start ─────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5002;
 
