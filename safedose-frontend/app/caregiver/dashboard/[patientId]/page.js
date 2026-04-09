@@ -4,7 +4,7 @@
 import '../../../patient/patient-dashboard.css';
 import '../../../patient/medications/medications.css';
 import '../../caregiver-dashboard.css';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 const FREQUENCIES = [
@@ -57,8 +57,7 @@ function getMedStatus(med) {
 
 function AddMedicationModal({ patientId, onClose, onSaved }) {
   const [form, setForm] = useState({
-    name:         '',
-    genericName:  '',
+    selectedDrug: null,
     dosage:       '',
     frequency:    'once daily',
     scheduleTimes: ['08:00 AM'],
@@ -66,8 +65,57 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
     startDate:    new Date().toISOString().slice(0, 10),
     endDate:      '',
   });
+  const [brandQuery, setBrandQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  const lookupRef = useRef(null);
+
+  useEffect(() => {
+    function handleOutsideClick(event) {
+      if (!lookupRef.current?.contains(event.target)) {
+        setShowResults(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    const query = brandQuery.trim();
+    if (!query) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const params = new URLSearchParams({ q: query, limit: '8', skip: '0' });
+        const res = await fetch(`/api/patient/drugs?${params}`, { signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok) {
+          setSearchResults([]);
+          return;
+        }
+        setSearchResults(data.drugs || []);
+      } catch (fetchError) {
+        if (fetchError.name !== 'AbortError') setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [brandQuery]);
 
   function generateTimes(firstTimeStr, count) {
     if (count <= 1) return [firstTimeStr || '08:00 AM'];
@@ -135,15 +183,49 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
   }
 
+  function handleBrandInput(value) {
+    setBrandQuery(value);
+    setShowResults(true);
+    setError('');
+    setForm(prev => ({
+      ...prev,
+      selectedDrug:
+        prev.selectedDrug && prev.selectedDrug.brandName.toLowerCase() === value.trim().toLowerCase()
+          ? prev.selectedDrug
+          : null,
+    }));
+  }
+
+  function handleDrugSelect(drug) {
+    setBrandQuery(drug.brandName);
+    setShowResults(false);
+    setError('');
+    setForm(prev => ({ ...prev, selectedDrug: drug }));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+
+    if (!form.selectedDrug || form.selectedDrug.brandName.toLowerCase() !== brandQuery.trim().toLowerCase()) {
+      setError('Select a medication from the brand name search results.');
+      return;
+    }
+
     setLoading(true);
     try {
       const res  = await fetch(`/api/caregiver/patients/${patientId}/medications`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(form),
+        body:    JSON.stringify({
+          selectedDrug: form.selectedDrug,
+          dosage: form.dosage,
+          frequency: form.frequency,
+          scheduleTimes: form.scheduleTimes,
+          isOngoing: form.isOngoing,
+          startDate: form.startDate,
+          endDate: form.endDate,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to add medication.'); return; }
@@ -174,21 +256,59 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="form-row-2">
-            <div className="form-grp">
-              <label>Brand name *</label>
-              <input name="name" placeholder="e.g. Tylenol" value={form.name} onChange={handleChange} required />
-            </div>
-            <div className="form-grp">
-              <label>Generic name *</label>
-              <input name="genericName" placeholder="e.g. Acetaminophen" value={form.genericName} onChange={handleChange} required />
-            </div>
+          <div className="form-grp form-grp--lookup" ref={lookupRef} style={{ gridColumn: '1 / -1' }}>
+            <label>Brand name *</label>
+            <input
+              name="brandName"
+              placeholder="Search brand name, e.g. Tylenol"
+              value={brandQuery}
+              onChange={e => handleBrandInput(e.target.value)}
+              onFocus={() => setShowResults(true)}
+              autoComplete="off"
+              required
+            />
+            {showResults && brandQuery.trim() && (
+              <div className="drug-lookup-results">
+                <div className="drug-lookup-header">Choose a medication from the FDA results below.</div>
+                {searchLoading ? (
+                  <div className="drug-lookup-row drug-lookup-row--muted">Searching FDA results…</div>
+                ) : searchResults.filter(drug => drug.brandName && drug.genericName).length > 0 ? (
+                  searchResults
+                    .filter(drug => drug.brandName && drug.genericName)
+                    .map(drug => (
+                      <button
+                        key={`${drug.id}-${drug.brandName}-${drug.genericName}`}
+                        type="button"
+                        className="drug-lookup-row"
+                        onClick={() => handleDrugSelect(drug)}
+                      >
+                        <span className="drug-lookup-title">{drug.brandName}</span>
+                        <span className="drug-lookup-sub">
+                          {drug.genericName}
+                        </span>
+                      </button>
+                    ))
+                ) : (
+                  <div className="drug-lookup-row drug-lookup-row--muted">No FDA matches found.</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="form-grp">
+            <label>Generic name *</label>
+            <input
+              value={form.selectedDrug?.genericName || ''}
+              placeholder="Selected automatically from FDA"
+              readOnly
+            />
           </div>
 
           <div className="form-row-2">
             <div className="form-grp">
               <label>Dosage *</label>
-              <input name="dosage" placeholder="e.g. 500mg" value={form.dosage} onChange={handleChange} required />
+              <input name="dosage" placeholder="e.g. 500mg" value={form.dosage}
+                     onChange={handleChange} required />
             </div>
             <div className="form-grp">
               <label>Frequency *</label>
@@ -212,18 +332,21 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
           <div className="form-row-2">
             <div className="form-grp">
               <label>Start date</label>
-              <input name="startDate" type="date" value={form.startDate} onChange={handleChange} />
+              <input name="startDate" type="date" value={form.startDate}
+                     onChange={handleChange} />
             </div>
             {!form.isOngoing && (
               <div className="form-grp">
                 <label>End date</label>
-                <input name="endDate" type="date" value={form.endDate} min={form.startDate} onChange={handleChange} required={!form.isOngoing} />
+                <input name="endDate" type="date" value={form.endDate} min={form.startDate}
+                       onChange={handleChange} required={!form.isOngoing} />
               </div>
             )}
           </div>
 
           <div className="form-grp form-grp-check">
-            <input id="isOngoing" name="isOngoing" type="checkbox" checked={form.isOngoing} onChange={handleChange} />
+            <input id="isOngoing" name="isOngoing" type="checkbox"
+                   checked={form.isOngoing} onChange={handleChange} />
             <label htmlFor="isOngoing">Ongoing medication (no end date)</label>
           </div>
 

@@ -16,6 +16,11 @@
   margin-bottom: 14px;
 }
 
+.form-grp--lookup {
+  position: relative;
+  z-index: 20;
+}
+
 .form-grp label {
   font-size: 13px;
   font-weight: 600;
@@ -50,13 +55,28 @@
 }
 
 .drug-lookup-results {
-  margin-top: 8px;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin-top: 0;
   border: 1px solid var(--gray200);
   border-radius: 12px;
   background: #fff;
   max-height: 220px;
   overflow-y: auto;
+  z-index: 30;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.drug-lookup-header {
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray600);
+  border-bottom: 1px solid var(--gray100);
+  background: var(--gray50);
+  border-radius: 11px 11px 0 0;
 }
 
 .drug-lookup-row {

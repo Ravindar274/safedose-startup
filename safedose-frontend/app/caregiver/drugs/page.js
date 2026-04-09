@@ -7,7 +7,7 @@ import '../../patient/medications/medications.css';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 30;
 
 const FREQUENCIES = [
   'once daily',
@@ -448,9 +448,9 @@ export default function DrugDirectory() {
         {!loading && drugs.length > 0 && (
           <>
             <div className="drug-grid">
-              {drugs.map(drug => (
+              {drugs.map((drug, idx) => (
                 <DrugCard
-                  key={drug.id + drug.brandName + drug.genericName}
+                  key={drug.id && drug.brandName && drug.genericName ? drug.id + drug.brandName + drug.genericName : `${skip}-${idx}`}
                   drug={drug}
                   onAdd={handleAdd}
                 />
