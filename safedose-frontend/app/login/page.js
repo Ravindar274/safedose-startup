@@ -104,7 +104,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit}>
             <div className="form-grp">
-              <label htmlFor="email">Email</label>
+              <label htmlFor="email">Email <span style={{ color: 'red' }}>*</span></label>
               <input
                 id="email"
                 type="email"
@@ -116,7 +116,7 @@ export default function LoginPage() {
             </div>
 
             <div className="form-grp">
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">Password <span style={{ color: 'red' }}>*</span></label>
               <input
                 id="password"
                 type="password"

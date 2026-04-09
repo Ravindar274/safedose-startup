@@ -17,7 +17,7 @@ router.get('/stats', async (req, res) => {
     const [totalCaregivers, totalPatients, totalUsers] = await Promise.all([
       User.countDocuments({ role: 'caregiver' }),
       Patient.countDocuments({}),
-      User.countDocuments({}),
+      User.countDocuments({ role: { $ne: 'admin' } }),
     ]);
     return res.json({ totalCaregivers, totalPatients, totalUsers });
   } catch (err) {
@@ -56,6 +56,26 @@ router.put('/caregivers/:id', async (req, res) => {
     return res.json({ user });
   } catch (err) {
     console.error('[ADMIN PUT CAREGIVER]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ── PUT /api/admin/caregivers/:id/status ──────────────────────
+router.put('/caregivers/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['active', 'pending', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status.' });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    ).select('-password');
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    return res.json({ user });
+  } catch (err) {
+    console.error('[ADMIN PUT CAREGIVER STATUS]', err);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
