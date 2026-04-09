@@ -34,6 +34,9 @@ app.use('/api/admin',     adminRoutes);
 // ── Health check ─────────────────────────────────────────────
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
+// ── root path ─────────────────────────────────────────────
+app.get('/', (_req, res) => res.json({ status: 'ok' }));
+
 // ── Daily adherence scheduler ─────────────────────────────────
 // Fires every day at 23:59 to snapshot each patient's taken/missed doses.
 // Uses recursive setTimeout so no external cron package is needed.

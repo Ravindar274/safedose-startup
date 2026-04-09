@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: chat-app
-        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-chat-service-image:v2
+        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-chat-service-image:v3
         ports:
         - containerPort: 8080
         env:
