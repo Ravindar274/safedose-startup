@@ -271,25 +271,26 @@ function AddMedicationModal({ onClose, onSaved }) {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="form-row-2">
-            <div className="form-grp" ref={lookupRef}>
-              <label>Brand name *</label>
-              <input
-                name="brandName"
-                placeholder="Search brand name, e.g. Tylenol"
-                value={brandQuery}
-                onChange={e => handleBrandInput(e.target.value)}
-                onFocus={() => setShowResults(true)}
-                autoComplete="off"
-                required
-              />
-              <p className="form-hint">Choose a medication from the FDA results below.</p>
-              {showResults && brandQuery.trim() && (
-                <div className="drug-lookup-results">
-                  {searchLoading ? (
-                    <div className="drug-lookup-row drug-lookup-row--muted">Searching FDA results…</div>
-                  ) : searchResults.length > 0 ? (
-                    searchResults.map(drug => (
+          <div className="form-grp form-grp--lookup" ref={lookupRef} style={{ gridColumn: '1 / -1' }}>
+            <label>Brand name *</label>
+            <input
+              name="brandName"
+              placeholder="Search brand name, e.g. Tylenol"
+              value={brandQuery}
+              onChange={e => handleBrandInput(e.target.value)}
+              onFocus={() => setShowResults(true)}
+              autoComplete="off"
+              required
+            />
+            {showResults && brandQuery.trim() && (
+              <div className="drug-lookup-results">
+                <div className="drug-lookup-header">Choose a medication from the FDA results below.</div>
+                {searchLoading ? (
+                  <div className="drug-lookup-row drug-lookup-row--muted">Searching FDA results…</div>
+                ) : searchResults.filter(drug => drug.brandName && drug.genericName).length > 0 ? (
+                  searchResults
+                    .filter(drug => drug.brandName && drug.genericName)
+                    .map(drug => (
                       <button
                         key={`${drug.id}-${drug.brandName}-${drug.genericName}`}
                         type="button"
@@ -298,24 +299,24 @@ function AddMedicationModal({ onClose, onSaved }) {
                       >
                         <span className="drug-lookup-title">{drug.brandName}</span>
                         <span className="drug-lookup-sub">
-                          {drug.genericName || 'Generic name unavailable'}
+                          {drug.genericName}
                         </span>
                       </button>
                     ))
-                  ) : (
-                    <div className="drug-lookup-row drug-lookup-row--muted">No FDA matches found.</div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="form-grp">
-              <label>Generic name *</label>
-              <input
-                value={form.selectedDrug?.genericName || ''}
-                placeholder="Selected automatically from FDA"
-                readOnly
-              />
-            </div>
+                ) : (
+                  <div className="drug-lookup-row drug-lookup-row--muted">No FDA matches found.</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="form-grp">
+            <label>Generic name *</label>
+            <input
+              value={form.selectedDrug?.genericName || ''}
+              placeholder="Selected automatically from FDA"
+              readOnly
+            />
           </div>
 
           <div className="form-row-2">

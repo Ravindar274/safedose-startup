@@ -16,7 +16,8 @@ export async function searchOpenFDADrugs(query = '', skip = 0, limit = 12) {
 
   const q = String(query || '').trim();
   if (q) {
-    const searchVal = `openfda.brand_name:"${q}" openfda.generic_name:"${q}"`;
+    // Use wildcards for partial/substring matching
+    const searchVal = `(openfda.brand_name:${q}* OR openfda.generic_name:${q}*)`;
     url += `&search=${encodeURIComponent(searchVal)}`;
   }
 
