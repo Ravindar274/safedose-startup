@@ -32,7 +32,7 @@ export default function LoginPage() {
 
       // Redirect based on role
       const roleHome = {
-        admin:     '/admin/dashboard',
+        admin:     '/admin/requests',
         patient:   '/patient/dashboard',
         caregiver: '/caregiver/dashboard',
       };

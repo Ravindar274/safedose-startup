@@ -13,6 +13,7 @@ export default function RegisterPage() {
     dateOfBirth: '', gender: 'Male',
     qualification: '', experienceYears: '', specialization: '', availability: 'full-time', licenseId: '', languagesSpoken: ''
   });
+  const [successMsg, setSuccessMsg] = useState('');
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -43,8 +44,12 @@ export default function RegisterPage() {
         return;
       }
 
-      // Auto redirect to login after successful registration
-      router.push('/login');
+      if (form.role === 'caregiver') {
+        setSuccessMsg('Your caregiver registration is complete! Your account is currently pending approval by an administrator. You will be able to log in once it is approved.');
+      } else {
+        // Auto redirect to login after successful registration for patients
+        router.push('/login');
+      }
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -106,10 +111,24 @@ export default function RegisterPage() {
       {/* ── Right panel ── */}
       <div className="auth-right">
         <div className="auth-form">
-          <h3>Create Account</h3>
-          <p className="sub">Set up your SafeDose profile</p>
+          {successMsg ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" width="48" height="48" style={{ color: 'var(--teal)', margin: '0 auto 16px' }}>
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <h3 style={{ marginBottom: 12 }}>Application Submitted</h3>
+              <p style={{ color: 'var(--gray600)', lineHeight: 1.5, marginBottom: 28 }}>{successMsg}</p>
+              <Link href="/login" className="btn btn-teal btn-full" style={{ display: 'block', textAlign: 'center' }}>
+                Return to Login
+              </Link>
+            </div>
+          ) : (
+            <>
+              <h3>Create Account</h3>
+              <p className="sub">Set up your SafeDose profile</p>
 
-          <form onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit}>
             <div className="form-row-2">
               <div className="form-grp">
                 <label htmlFor="firstName">First Name <span style={{ color: 'red' }}>*</span></label>
@@ -144,7 +163,7 @@ export default function RegisterPage() {
             <div className="form-row-2">
               <div className="form-grp">
                 <label htmlFor="dateOfBirth">Date of Birth <span style={{ color: 'red' }}>*</span></label>
-                <input id="dateOfBirth" name="dateOfBirth" type="date"
+                <input id="dateOfBirth" name="dateOfBirth" type="date" max={new Date().toISOString().split('T')[0]}
                   value={form.dateOfBirth} onChange={handleChange} required />
               </div>
               <div className="form-grp">
@@ -220,6 +239,8 @@ export default function RegisterPage() {
           <p className="auth-switch">
             Already registered? <Link href="/login">Sign in</Link>
           </p>
+            </>
+          )}
         </div>
       </div>
 

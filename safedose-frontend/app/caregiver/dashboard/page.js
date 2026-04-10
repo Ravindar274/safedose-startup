@@ -110,7 +110,7 @@ function AddPatientModal({ onClose, onSaved }) {
               </div>
               <div className="form-grp">
                 <label>Date of birth (optional)</label>
-                <input name="dateOfBirth" type="date" value={form.dateOfBirth} onChange={handleChange} />
+                <input name="dateOfBirth" type="date" max={new Date().toISOString().split('T')[0]} value={form.dateOfBirth} onChange={handleChange} />
               </div>
               <div className="form-grp">
                 <label>Notes (optional)</label>
@@ -160,6 +160,15 @@ export default function CaregiverDashboard() {
 
   useEffect(() => { fetchPatients(); }, [fetchPatients]);
 
+  async function handleRequest(id, action) {
+    try {
+      const res = await fetch(`/api/caregiver/patients/${id}/${action}`, { method: 'PATCH' });
+      if (res.ok) fetchPatients();
+    } catch(err) {
+      console.error(err);
+    }
+  }
+
   async function deletePatient(id) {
     if (!confirm('Remove this patient from your roster?')) return;
     await fetch(`/api/caregiver/patients/${id}`, { method: 'DELETE' });
@@ -171,16 +180,17 @@ export default function CaregiverDashboard() {
   }
 
   // ── Derived stats ──
-  // medsToday: active medications for today (from backend live computation)
-  // missedToday: doses overdue and not taken (from backend live computation)
-  const total        = patients.length;
-  const onTrack      = patients.filter(p => p.medsToday > 0 && p.missedToday === 0).length;
-  const missed       = patients.filter(p => p.missedToday > 0).length;
-  const noMeds       = patients.filter(p => p.medsToday === 0).length;
+  const pendingRequests = patients.filter(p => p.assignmentStatus === 'pending');
+  const activePatients  = patients.filter(p => p.assignmentStatus !== 'pending');
+
+  const total        = activePatients.length;
+  const onTrack      = activePatients.filter(p => p.medsToday > 0 && p.missedToday === 0).length;
+  const missed       = activePatients.filter(p => p.missedToday > 0).length;
+  const noMeds       = activePatients.filter(p => p.medsToday === 0).length;
   const adherencePct = total > 0 ? Math.round((onTrack / total) * 100) : 0;
 
-  const missedPatients  = patients.filter(p => p.missedToday > 0);
-  const onTrackPatients = patients.filter(p => p.missedToday === 0);
+  const missedPatients  = activePatients.filter(p => p.missedToday > 0);
+  const onTrackPatients = activePatients.filter(p => p.missedToday === 0);
 
   return (
     <>
@@ -260,6 +270,37 @@ export default function CaregiverDashboard() {
           </div>
         </div>
 
+        {/* ── Pending Requests ── */}
+        {pendingRequests.length > 0 && (
+          <div className="card-box" style={{ marginBottom: 24, padding: 24, border: '1px solid #ffedd5' }}>
+            <div className="section-hdr" style={{ marginBottom: 16 }}>
+              <h3 style={{ color: '#ea580c', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                  <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.9 1.3 1.5 1.5 2.5"/>
+                  <path d="M9 18h6"/>
+                  <path d="M10 22h4"/>
+                </svg>
+                New Patient Requests
+              </h3>
+            </div>
+            {pendingRequests.map(p => (
+              <div key={p._id} className="patient-row" style={{ background: '#fff9f2', borderRadius: 12, padding: 16, border: '1px solid #ffedd5' }}>
+                <div className="patient-avatar" style={{ background: '#ffedd5', color: '#ea580c' }}>
+                  {initials(p.firstName, p.lastName)}
+                </div>
+                <div className="patient-info">
+                  <span className="patient-name">{p.firstName} {p.lastName}</span>
+                  <span className="patient-no-account" style={{ background: '#ea580c', color: '#fff', marginLeft: 8 }}>requested you as caregiver</span>
+                </div>
+                <div className="patient-actions" style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn" style={{ background: 'var(--warn-soft)', color: 'var(--warn)', padding: '6px 16px' }} onClick={() => handleRequest(p._id, 'reject')}>Decline</button>
+                  <button className="btn btn-teal" style={{ padding: '6px 16px' }} onClick={() => handleRequest(p._id, 'accept')}>Accept</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ── Patient roster ── */}
         <div className="card-box">
           <div className="section-hdr">
@@ -275,8 +316,8 @@ export default function CaregiverDashboard() {
 
           {loading ? (
             <p style={{ color: 'var(--gray400)', fontSize: 13, padding: '20px 0' }}>Loading patients…</p>
-          ) : patients.length === 0 ? (
-            <p style={{ color: 'var(--gray400)', fontSize: 13, padding: '20px 0' }}>No patients yet. Click &quot;Add patient&quot; to get started.</p>
+          ) : activePatients.length === 0 ? (
+            <p style={{ color: 'var(--gray400)', fontSize: 13, padding: '20px 0' }}>No active patients yet. Click &quot;Add patient&quot; to get started.</p>
           ) : (
             <>
               {/* Missed doses section */}

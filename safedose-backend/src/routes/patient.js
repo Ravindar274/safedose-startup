@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import Patient    from '../models/Patient.js';
 import Medication from '../models/Medication.js';
+import Assignment from '../models/Assignment.js';
 
 import User       from '../models/User.js';
 import { getPatientAdherenceSummary } from '../lib/adherence.js';
@@ -313,6 +314,98 @@ router.delete('/medications/:id', async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error('[DELETE MED]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/patient/caregivers
+// List all active caregivers, mapping their assignment status
+// ─────────────────────────────────────────────────────────────
+router.get('/caregivers', async (req, res) => {
+  try {
+    const patient = await getOrCreatePatient(req.user.userId);
+    
+    // Get all active caregivers (including older ones with no status)
+    const allCaregivers = await User.find({ 
+      role: 'caregiver', 
+      $or: [{ status: 'active' }, { status: null }, { status: { $exists: false } }]
+    }, '-password');
+    
+    // Get my assignments
+    const assignments = await Assignment.find({ patientId: patient._id });
+    const assignedMap = new Map(assignments.map(a => [a.caregiverId.toString(), a.status]));
+    
+    const currentAssignment = assignments.find(a => a.status === 'active' || a.status === 'pending' || !a.status);
+    const hasCaregiver = !!currentAssignment;
+    
+    const result = [];
+    for (const c of allCaregivers) {
+      const assignmentStatus = assignedMap.get(c._id.toString());
+      if (assignmentStatus === 'declined') continue;
+      
+      result.push({
+        _id: c._id,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        email: c.email,
+        profile: c.caregiverProfile || {},
+        isAssigned: !!assignmentStatus,
+        assignmentStatus
+      });
+    }
+    
+    return res.json({ caregivers: result, hasCaregiver });
+  } catch (err) {
+    console.error('[GET PATIENT CAREGIVERS]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/patient/caregivers/:id/link
+// Assign a caregiver to the patient
+// ─────────────────────────────────────────────────────────────
+router.post('/caregivers/:id/link', async (req, res) => {
+  try {
+    const patient = await getOrCreatePatient(req.user.userId);
+    const caregiverId = req.params.id;
+    
+    const cg = await User.findOne({ _id: caregiverId, role: 'caregiver', status: 'active' });
+    if (!cg) return res.status(404).json({ error: 'Caregiver not active or not found.' });
+
+    const existing = await Assignment.findOne({ caregiverId, patientId: patient._id });
+    if (existing) return res.status(400).json({ error: 'Caregiver is already assigned or requested.' });
+
+    const currentAssigned = await Assignment.findOne({ 
+      patientId: patient._id, 
+      $or: [{ status: { $in: ['active', 'pending'] } }, { status: null }, { status: { $exists: false } }]
+    });
+    if (currentAssigned) return res.status(400).json({ error: 'You already have an assigned caregiver. Please unassign them first.' });
+
+    await Assignment.create({ caregiverId, patientId: patient._id, role: 'caregiver', status: 'pending' });
+    
+    return res.json({ success: true, message: 'Request sent successfully.' });
+  } catch (err) {
+    console.error('[POST CAREGIVER LINK]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// DELETE /api/patient/caregivers/unassign
+// Revokes the current assignment so the patient can pick a new caregiver
+// ─────────────────────────────────────────────────────────────
+router.delete('/caregivers/unassign', async (req, res) => {
+  try {
+    const patient = await getOrCreatePatient(req.user.userId);
+    await Assignment.deleteMany({ 
+      patientId: patient._id, 
+      $or: [{ status: { $in: ['active', 'pending'] } }, { status: null }, { status: { $exists: false } }]
+    });
+    return res.json({ success: true, message: 'Caregiver unassigned.' });
+  } catch (err) {
+    console.error('[DELETE UNASSIGN]', err);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });

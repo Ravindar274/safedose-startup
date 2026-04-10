@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { verifyTokenEdge } from './lib/jwt-edge';
 
 const ROLE_HOME = {
-  admin:     '/admin/dashboard',
+  admin:     '/admin/requests',
   patient:   '/patient/dashboard',
   caregiver: '/caregiver/dashboard',
 };

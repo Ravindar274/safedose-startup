@@ -28,6 +28,11 @@ const AssignmentSchema = new mongoose.Schema(
       enum: ['owner', 'caregiver'],
       default: 'caregiver',
     },
+    status: {
+      type: String,
+      enum: ['pending', 'active', 'declined'],
+      default: 'active', // default active for backward compatibility with 'owner'
+    },
   },
   { timestamps: true }
 );

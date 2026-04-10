@@ -137,7 +137,7 @@ function EditPatientModal({ patient, onClose, onSaved }) {
           </div>
           <div className="form-grp">
             <label>Date of birth</label>
-            <input type="date" value={form.dateOfBirth} onChange={e => setForm({ ...form, dateOfBirth: e.target.value })} />
+            <input type="date" max={new Date().toISOString().split('T')[0]} value={form.dateOfBirth} onChange={e => setForm({ ...form, dateOfBirth: e.target.value })} />
           </div>
           <div className="form-grp">
             <label>Notes</label>
@@ -188,6 +188,47 @@ function DeleteConfirmModal({ name, onClose, onConfirm }) {
   );
 }
 
+// ── Caregiver Details Modal ───────────────────────────────────
+function CaregiverDetailsModal({ caregiver, onClose }) {
+  const profile = caregiver.caregiverProfile || {};
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+        <div className="modal-header">
+          <div>
+            <h3 className="modal-title">Caregiver Application Details</h3>
+            <p className="modal-sub">{caregiver.firstName} {caregiver.lastName}</p>
+          </div>
+          <button className="modal-close" onClick={onClose} type="button">
+            <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div style={{ marginTop: 20, display: 'grid', gap: 12, fontSize: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div><strong style={{ display: 'block', color: 'var(--gray500)', fontSize: 12, marginBottom: 4 }}>Email</strong> {caregiver.email}</div>
+            <div><strong style={{ display: 'block', color: 'var(--gray500)', fontSize: 12, marginBottom: 4 }}>Gender</strong> {caregiver.gender || 'N/A'}</div>
+          </div>
+          <hr style={{ border: 'none', borderTop: '1px solid var(--gray200)', margin: '8px 0' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div><strong style={{ display: 'block', color: 'var(--gray500)', fontSize: 12, marginBottom: 4 }}>Qualification</strong> {profile.qualification || 'N/A'}</div>
+            <div><strong style={{ display: 'block', color: 'var(--gray500)', fontSize: 12, marginBottom: 4 }}>Specialization</strong> {profile.specialization || 'N/A'}</div>
+            <div><strong style={{ display: 'block', color: 'var(--gray500)', fontSize: 12, marginBottom: 4 }}>Experience</strong> {profile.experienceYears ? `${profile.experienceYears} years` : 'N/A'}</div>
+            <div><strong style={{ display: 'block', color: 'var(--gray500)', fontSize: 12, marginBottom: 4 }}>License ID</strong> {profile.licenseId || 'N/A'}</div>
+          </div>
+          <div><strong style={{ display: 'block', color: 'var(--gray500)', fontSize: 12, marginBottom: 4 }}>Languages</strong> {profile.languagesSpoken || 'N/A'}</div>
+          <div><strong style={{ display: 'block', color: 'var(--gray500)', fontSize: 12, marginBottom: 4 }}>Availability</strong> {profile.availability || 'N/A'}</div>
+        </div>
+        <div style={{ marginTop: 24 }}>
+          <button type="button" className="btn btn-teal btn-full" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────
 export default function AdminDashboard() {
   const [tab,        setTab]        = useState('patients'); // 'patients' | 'caregivers'
@@ -199,6 +240,7 @@ export default function AdminDashboard() {
 
   const [editPatient,   setEditPatient]   = useState(null);
   const [editCaregiver, setEditCaregiver] = useState(null);
+  const [viewCaregiver, setViewCaregiver] = useState(null);
   const [deleteTarget,  setDeleteTarget]  = useState(null); // { type, item }
 
   useEffect(() => {
@@ -233,10 +275,14 @@ export default function AdminDashboard() {
     );
   }, [patients, search]);
 
+  const activeCaregivers = useMemo(() => {
+    return caregivers.filter(c => !c.status || c.status === 'active');
+  }, [caregivers]);
+
   const filteredCaregivers = useMemo(() => {
     const q = search.toLowerCase();
-    if (!q) return caregivers;
-    return caregivers.filter(c =>
+    if (!q) return activeCaregivers;
+    return activeCaregivers.filter(c =>
       `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) ||
       c.email?.toLowerCase().includes(q)
     );
@@ -366,7 +412,7 @@ export default function AdminDashboard() {
                   <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                 </svg>
                 Caregivers
-                <span className="admin-tab-count">{caregivers.length}</span>
+                <span className="admin-tab-count">{activeCaregivers.length}</span>
               </button>
             </div>
 
@@ -494,6 +540,13 @@ export default function AdminDashboard() {
                                 </button>
                               </>
                             )}
+                            <button className="admin-action-btn edit" onClick={() => setViewCaregiver(c)}>
+                              <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+                                   strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                              </svg>
+                              Details
+                            </button>
                             <button className="admin-action-btn edit" onClick={() => setEditCaregiver(c)}>
                               <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
                                    strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
@@ -554,6 +607,13 @@ export default function AdminDashboard() {
               ? handleDeletePatient(deleteTarget.item._id)
               : handleDeleteCaregiver(deleteTarget.item._id)
           }
+        />
+      )}
+
+      {viewCaregiver && (
+        <CaregiverDetailsModal
+          caregiver={viewCaregiver}
+          onClose={() => setViewCaregiver(null)}
         />
       )}
     </>

@@ -4,8 +4,25 @@
 import '../app.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AuthProvider } from '../context/AuthContext';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import ChatFab from '../components/ChatFab';
+
+function UserInfo() {
+  const { user } = useAuth();
+  const initial = user?.firstName?.charAt(0).toUpperCase() || 'P';
+  const name = user ? `${user.firstName} ${user.lastName}` : 'My Account';
+  const role = user?.role || 'patient';
+
+  return (
+    <div className="sb-user">
+      <div className="sb-avatar">{initial}</div>
+      <div>
+        <p className="sb-user-name">{name}</p>
+        <p className="sb-user-role">{role}</p>
+      </div>
+    </div>
+  );
+}
 
 const navItems = [
   {
@@ -80,6 +97,18 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    href: '/patient/caregivers',
+    label: 'Caregivers',
+    icon: (
+      <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+  },
 ];
 
 export default function PatientLayout({ children }) {
@@ -100,13 +129,7 @@ export default function PatientLayout({ children }) {
           <div className="logo">Safe<span>Dose</span></div>
         </div>
 
-        <div className="sb-user">
-          <div className="sb-avatar">P</div>
-          <div>
-            <p className="sb-user-name">My Account</p>
-            <p className="sb-user-role">patient</p>
-          </div>
-        </div>
+        <UserInfo />
 
         <nav className="sb-nav">
           <p className="sb-section-lbl">Patient</p>

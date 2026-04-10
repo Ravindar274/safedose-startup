@@ -109,6 +109,7 @@ router.get('/patients', async (req, res) => {
           return {
             ...a.patientId.toObject(),
             assignmentRole: a.role,
+            assignmentStatus: a.status || 'active',
             missedToday,
             medsToday,
           };
@@ -395,10 +396,13 @@ router.post('/patients', async (req, res) => {
         });
       }
 
-      // Check for duplicate assignment
-      const existing = await Assignment.findOne({ caregiverId: req.user.userId, patientId: patient._id });
+      // Check for duplicate assignment or if patient already has another caregiver
+      const existing = await Assignment.findOne({ patientId: patient._id, status: { $in: ['active', 'pending'] } });
       if (existing) {
-        return res.status(409).json({ error: 'This patient is already in your roster.' });
+        if (existing.caregiverId.toString() === req.user.userId) {
+          return res.status(409).json({ error: 'This patient is already in your roster.' });
+        }
+        return res.status(409).json({ error: 'This patient is already linked to another caregiver.' });
       }
 
       await Assignment.create({
@@ -542,6 +546,42 @@ router.delete('/patients/:id', async (req, res) => {
     return res.json({ message: 'Patient removed.' });
   } catch (err) {
     console.error('[DELETE PATIENT ERROR]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PATCH /api/caregiver/patients/:id/accept
+// Accept a pending assignment request from a patient.
+// ─────────────────────────────────────────────────────────────
+router.patch('/patients/:id/accept', async (req, res) => {
+  try {
+    const assignment = await Assignment.findOne({ caregiverId: req.user.userId, patientId: req.params.id });
+    if (!assignment) return res.status(404).json({ error: 'Request not found.' });
+
+    assignment.status = 'active';
+    await assignment.save();
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[PATCH ACCEPT CAREGIVER]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PATCH /api/caregiver/patients/:id/reject
+// Reject a pending assignment request from a patient.
+// ─────────────────────────────────────────────────────────────
+router.patch('/patients/:id/reject', async (req, res) => {
+  try {
+    const assignment = await Assignment.findOne({ caregiverId: req.user.userId, patientId: req.params.id });
+    if (!assignment) return res.status(404).json({ error: 'Request not found.' });
+
+    assignment.status = 'declined';
+    await assignment.save();
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[PATCH REJECT CAREGIVER]', err);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });

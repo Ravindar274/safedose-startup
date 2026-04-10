@@ -4,6 +4,7 @@
 import '../patient-dashboard.css';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import NotificationBell from '../../components/NotificationBell';
+import { useAuth } from '../../context/AuthContext';
 
 const FREQUENCIES = [
   'once daily',
@@ -478,6 +479,9 @@ function MedRow({ med, onToggleTaken }) {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function PatientDashboard() {
+  const { user } = useAuth();
+  const initial = user?.firstName?.charAt(0).toUpperCase() || 'P';
+
   const [medications, setMedications] = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [showModal,   setShowModal]   = useState(false);
@@ -546,7 +550,7 @@ export default function PatientDashboard() {
         </div>
         <div className="topbar-right">
           <NotificationBell />
-          <div className="topbar-avatar">P</div>
+          <div className="topbar-avatar">{initial}</div>
         </div>
       </div>
 
