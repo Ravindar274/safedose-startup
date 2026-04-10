@@ -8,7 +8,7 @@ const router = Router();
 
 const COOKIE_OPTS = {
   httpOnly: true,
-  sameSite: 'lax',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   path: '/',
   maxAge: 60 * 60 * 24 * 7 * 1000, // 7 days in ms
   secure: process.env.NODE_ENV === 'production',

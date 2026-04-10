@@ -20,6 +20,8 @@ spec:
         env:
         - name: PORT
           value: "8080"
+        - name: NODE_ENV
+          value: "production"
         # Add any other .env variables your chat service needs here
         - name: MONGODB_URI
           valueFrom:
