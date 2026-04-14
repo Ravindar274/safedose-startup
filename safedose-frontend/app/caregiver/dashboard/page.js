@@ -2,7 +2,7 @@
 
 'use client';
 import '../caregiver-dashboard.css';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NotificationBell from '../../components/NotificationBell';
 
@@ -178,6 +178,10 @@ function AddPatientModal({ onClose, onSaved }) {
 
 // ── Main Page ─────────────────────────────────────────────
 export default function CaregiverDashboard() {
+  return <Suspense><CaregiverDashboardInner /></Suspense>;
+}
+
+function CaregiverDashboardInner() {
   const [patients,  setPatients]  = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [showModal, setShowModal] = useState(false);
