@@ -15,7 +15,7 @@ spec:
       containers:
       - name: node-app
         # Note the :v2 at the end of the image path
-        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-backend-image:v4
+        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-backend-image:v5
         ports:
         - containerPort: 8080
         # Add your .env properties here
@@ -34,11 +34,13 @@ spec:
               key: JWT_SECRET
         - name: CLIENT_ORIGIN
           value: "https://safedose-jet.vercel.app"
-        - name: APPS_SCRIPT_URL
+        - name: SENDGRID_API_KEY
           valueFrom:
             secretKeyRef:
               name: safedose-secrets
-              key: APPS_SCRIPT_URL
+              key: SENDGRID_API_KEY
+        - name: SENDGRID_FROM_EMAIL
+          value: "noreply@safe-dose.org"
         - name: VAPID_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
