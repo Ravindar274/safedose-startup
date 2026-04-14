@@ -2,7 +2,7 @@
 
 'use client';
 import '../patient-dashboard.css';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NotificationBell from '../../components/NotificationBell';
 
@@ -768,6 +768,10 @@ function FindCaregiverModal({ onClose }) {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function PatientDashboard() {
+  return <Suspense><PatientDashboardInner /></Suspense>;
+}
+
+function PatientDashboardInner() {
   const [medications,        setMedications]        = useState([]);
   const [loading,            setLoading]            = useState(true);
   const [showModal,          setShowModal]          = useState(false);
