@@ -33,7 +33,24 @@ spec:
               name: safedose-secrets
               key: JWT_SECRET
         - name: CLIENT_ORIGIN
-          value: "https://safedose-jet.vercel.app" # This is how Backend finds Chat Service
+          value: "https://safedose-jet.vercel.app"
+        - name: APPS_SCRIPT_URL
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: APPS_SCRIPT_URL
+        - name: VAPID_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: VAPID_PUBLIC_KEY
+        - name: VAPID_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: VAPID_PRIVATE_KEY
+        - name: VAPID_MAILTO
+          value: "admin@safedose.com"
 ---
 apiVersion: v1
 kind: Service

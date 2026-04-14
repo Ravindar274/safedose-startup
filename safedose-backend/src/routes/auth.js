@@ -1,8 +1,11 @@
 // src/routes/auth.js
 
 import { Router } from 'express';
-import User from '../models/User.js';
+import User             from '../models/User.js';
+import Patient          from '../models/Patient.js';
+import CaregiverProfile from '../models/CaregiverProfile.js';
 import { signToken } from '../lib/jwt.js';
+import { sendEmail } from '../lib/sendEmail.js';
 
 const router = Router();
 
@@ -14,12 +17,18 @@ const COOKIE_OPTS = {
   secure: process.env.NODE_ENV === 'production',
 };
 
+// ─────────────────────────────────────────────────────────────
 // POST /api/auth/register
+// Creates a lean User record and a role-specific profile document.
+// ─────────────────────────────────────────────────────────────
 router.post('/register', async (req, res) => {
   try {
-    const { 
+    const {
       firstName, lastName, email, password, confirmPassword, role,
-      dateOfBirth, gender, qualification, experienceYears, specialization, availability, licenseId, languagesSpoken
+      // Shared profile fields
+      dateOfBirth, gender,
+      // Caregiver-only fields
+      qualification, experienceYears, specialization, availability, licenseId, languagesSpoken,
     } = req.body;
 
     if (!firstName || !lastName || !email || !password || !dateOfBirth || !gender) {
@@ -44,24 +53,54 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'Email already registered.' });
     }
 
-    const userData = { 
-      firstName, lastName, email, password, role: assignedRole,
-      dateOfBirth, gender
-    };
+    // ── 1. Create the lean User ───────────────────────────────
+    const userStatus = assignedRole === 'caregiver' ? 'pending' : 'active';
+    const user = await User.create({
+      firstName, lastName, email, password,
+      role: assignedRole,
+      status: userStatus,
+    });
 
-    if (assignedRole === 'caregiver') {
-      userData.status = 'pending';
-      userData.caregiverProfile = {
-        qualification,
-        experienceYears: experienceYears ? Number(experienceYears) : undefined,
-        specialization,
-        availability,
-        licenseId,
-        languagesSpoken
-      };
+    // ── 2. Create the role-specific profile ───────────────────
+    if (assignedRole === 'patient') {
+      await Patient.create({
+        linkedUserId: user._id,
+        firstName,
+        lastName,
+        email,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        gender: gender || '',
+      });
+    } else if (assignedRole === 'caregiver') {
+      await CaregiverProfile.create({
+        userId: user._id,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        gender: gender || '',
+        qualification:   qualification   || '',
+        experienceYears: experienceYears ? Number(experienceYears) : null,
+        specialization:  specialization  || '',
+        availability:    availability    || '',
+        licenseId:       licenseId       || '',
+        languagesSpoken: languagesSpoken || '',
+      });
     }
+    // Admin: no profile document needed
 
-    const user = await User.create(userData);
+    // ── 3. Send welcome email (fire-and-forget) ───────────────
+    const APP_URL = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
+    if (assignedRole === 'patient') {
+      sendEmail(
+        email,
+        '👋 Welcome to SafeDose!',
+        buildWelcomePatientEmail(firstName, APP_URL)
+      ).catch(() => {});
+    } else if (assignedRole === 'caregiver') {
+      sendEmail(
+        email,
+        '👋 Welcome to SafeDose — Account Under Review',
+        buildWelcomeCaregiverEmail(firstName, APP_URL)
+      ).catch(() => {});
+    }
 
     return res.status(201).json({ message: 'Account created successfully.', userId: user._id });
   } catch (err) {
@@ -70,7 +109,9 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
 // POST /api/auth/login
+// ─────────────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -121,10 +162,66 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
 // POST /api/auth/logout
+// ─────────────────────────────────────────────────────────────
 router.post('/logout', (_req, res) => {
   res.clearCookie('safedose_token', { path: '/' });
   return res.json({ message: 'Logged out.' });
 });
+
+// ── Email template helpers ────────────────────────────────────
+
+function emailShell(headerTitle, headerSub, bodyHtml, appUrl) {
+  return `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <tr><td style="background:#0d9488;padding:24px 32px;">
+        <p style="margin:0;color:#ffffff;font-size:22px;font-weight:bold;">💊 SafeDose</p>
+        <p style="margin:4px 0 0;color:#ccfbf1;font-size:13px;">${headerSub}</p>
+      </td></tr>
+      <tr><td style="padding:32px;">
+        ${bodyHtml}
+      </td></tr>
+      <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;font-size:12px;color:#9ca3af;">SafeDose — Medication Safety Assistant &nbsp;|&nbsp; <a href="${appUrl}" style="color:#0d9488;text-decoration:none;">Open Dashboard</a></p>
+        <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">Do not reply to this email.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+}
+
+function buildWelcomePatientEmail(firstName, appUrl) {
+  const body = `
+    <p style="margin:0 0 8px;font-size:16px;color:#111827;font-weight:bold;">Welcome, ${firstName}!</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;">Your SafeDose patient account is ready. You can now:</p>
+    <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;color:#374151;line-height:2;">
+      <li>Track your daily medications and doses</li>
+      <li>Browse and hire a caregiver</li>
+      <li>Receive dose reminders by email and push notification</li>
+    </ul>
+    <a href="${appUrl}/patient/dashboard" style="display:inline-block;background:#0d9488;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:bold;text-decoration:none;">Go to my dashboard →</a>`;
+  return emailShell('Welcome to SafeDose', 'Account Created', body, `${appUrl}/patient/dashboard`);
+}
+
+function buildWelcomeCaregiverEmail(firstName, appUrl) {
+  const body = `
+    <p style="margin:0 0 8px;font-size:16px;color:#111827;font-weight:bold;">Welcome, ${firstName}!</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;">Your SafeDose caregiver account has been created and is now <strong>pending admin review</strong>.</p>
+    <table style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;width:100%;margin:0 0 20px;" cellpadding="14" cellspacing="0">
+      <tr><td>
+        <p style="margin:0;font-size:14px;color:#92400e;font-weight:bold;">⏳ What happens next?</p>
+        <p style="margin:6px 0 0;font-size:13px;color:#92400e;">Our admin team will review your credentials and license details. You will receive an email once your account is approved or if any action is needed.</p>
+      </td></tr>
+    </table>
+    <p style="margin:0;font-size:13px;color:#6b7280;">Approval typically takes 1–2 business days. If you have questions, contact us through the platform.</p>`;
+  return emailShell('Welcome to SafeDose', 'Caregiver Account — Pending Review', body, appUrl);
+}
 
 export default router;

@@ -1,3 +1,6 @@
+gcloud auth login
+
+
 gcloud artifacts repositories create safedose-node-apps-repo --repository-format=docker --location=us-central1 --description="Docker repository for my two Node apps"
 
 
@@ -17,15 +20,35 @@ gcloud container clusters create-auto safedose-cluster `
 	
 gcloud container clusters get-credentials safedose-cluster --location us-central1
 
+gcloud container clusters list
+
+
+kubectl delete secret safedose-secrets
+
+
+kubectl create secret generic safedose-secrets  
+--from-literal=MONGODB_URI="mongodb+srv://admin:12345@cluster0.msd5ckv.mongodb.net/safedose" 
+--from-literal=JWT_SECRET="0d16a23790fc49d8dc2271a259a0a833928be411f5ee15de0e5e9919bec3fee3305029aa92880bb34c0c4a6cf2812a3a51da2c8d536d54cb65095bc608b02902"
+--from-literal=APPS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbyTbljBDRi4LaV2yIRi60O4EXT6dLjnWl66sSfLn9M4weMdr5I6PTPGbhLf3BG51i8C9A/exec" 
+--from-literal=VAPID_PUBLIC_KEY="BMKRYHZ0VLJd8xLtqvEgeJEkQHeC5ErSAN9QVzF_PMh9qgx3A87f1yWTtm32Y560qfOIrdLkXk2xDhEY-LP6-Pk"
+--from-literal=VAPID_PRIVATE_KEY="V6z-cZLRVivsxkT059vjljCV8iQ87shABGGwdRbkWks"
+--from-literal=GEMINI_API_KEY="AIzaSyC7A06kVmW2wtWQuEWahS5n1Po-hb_YIrs"
+
+--dry-run=client -o yaml | kubectl apply -f -
+
+
+
+
 kubectl create secret generic safedose-secrets `
+  --from-literal=MONGODB_URI="your-mongodb-uri" `
+  --from-literal=JWT_SECRET="your-jwt-secret" `
+  --from-literal=APPS_SCRIPT_URL="https://script.google.com/macros/s/.../exec" `
+  --from-literal=VAPID_PUBLIC_KEY="your-vapid-public-key" `
+  --from-literal=VAPID_PRIVATE_KEY="your-vapid-private-key"
+  --from-literal=GEMINI_API_KEY="your-vapid-private-key"
 
-    --from-literal=GEMINI_API_KEY=AIzaSyDuIhzcwCM3Cz6MF_wHm2h_PFuJX6jS5os`
-
-    --from-literal=MONGODB_URI="mongodb+srv://admin:12345@cluster0.msd5ckv.mongodb.net/safedose?retryWrites=true&w=majority" `
-
-    --from-literal=JWT_SECRET="0d16a23790fc49d8dc2271a259a0a833928be411f5ee15de0e5e9919bec3fee3305029aa92880bb34c0c4a6cf2812a3a51da2c8d536d54cb65095bc608b02902" `
-
-    --dry-run=client -o yaml | kubectl apply -f -
+	
+	
 	
 	
 
@@ -33,6 +56,8 @@ kubectl apply -f backend-deploy.yaml
 
 kubectl apply -f chat-deploy.yaml
 
+kubectl rollout restart deployment/safedose-backend
+kubectl rollout restart deployment/safedose-chat
 
 #check status
 kubectl get pods
@@ -49,5 +74,12 @@ kubectl apply -f safedose-routes.yaml
 
 NEXT_PUBLIC_CHAT_API_URL
 NEXT_PUBLIC_API_URL
+
+# invalid key
+kubectl create secret generic safedose-secrets --from-literal=GEMINI_API_KEY=AIzaSyC7A06kVmW2wtWQuEWahS5n1Po --from-literal=MONGODB_URI=mongodb+srv://admin:12345@cluster0.msd5ckv.mongodb.net/safedose?retryWrites=true&w=majority --from-literal=JWT_SECRET=0d16a23790fc49d8dc2271a259a0a833928be411f5ee15de0e5e9919bec3fee3305029aa92880bb34c0c4a6cf2812a3a51da2c8d536d54cb65095bc608b02902 --dry-run=client -o yaml | kubectl apply -f -
+
+#valid key
+kubectl create secret generic safedose-secrets --from-literal=GEMINI_API_KEY=AIzaSyC7A06kVmW2wtWQuEWahS5n1Po-hb_YIrs --from-literal=MONGODB_URI=mongodb+srv://admin:12345@cluster0.msd5ckv.mongodb.net/safedose?retryWrites=true&w=majority --from-literal=JWT_SECRET=0d16a23790fc49d8dc2271a259a0a833928be411f5ee15de0e5e9919bec3fee3305029aa92880bb34c0c4a6cf2812a3a51da2c8d536d54cb65095bc608b02902 --dry-run=client -o yaml | kubectl apply -f -
+
 
 
