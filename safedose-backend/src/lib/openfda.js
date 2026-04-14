@@ -30,8 +30,8 @@ export async function searchOpenFDADrugs(query = '', skip = 0, limit = 12) {
   }
 
   const data = await response.json();
-  const total = data.meta?.results?.total ?? 0;
-  const drugs = (data.results || []).map((item) => ({
+  const rawTotal = data.meta?.results?.total ?? 0;
+  const mapped = (data.results || []).map((item) => ({
     id:           item.openfda?.package_ndc?.[0]        ?? '',
     brandName:    (item.openfda?.brand_name?.[0]        ?? 'Unknown').replace(/_/g, ' '),
     genericName:  (item.openfda?.generic_name?.[0]      ?? '').replace(/_/g, ' '),
@@ -40,6 +40,12 @@ export async function searchOpenFDADrugs(query = '', skip = 0, limit = 12) {
     indication:   (item.indications_and_usage?.[0]      ?? '').slice(0, 220),
     rxcui:         item.openfda?.rxcui?.[0]             ?? '',
   }));
+
+  const drugs = mapped.filter(
+    (d) => d.brandName !== 'Unknown' || d.genericName.trim() !== ''
+  );
+  const filtered = mapped.length - drugs.length;
+  const total = Math.max(0, rawTotal - filtered);
 
   return { drugs, total };
 }
