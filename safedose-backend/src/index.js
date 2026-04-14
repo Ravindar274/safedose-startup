@@ -98,7 +98,16 @@ function buildMarkTakenToken(medicationId, doseIndex) {
   return jwt.sign({ medicationId, doseIndex, date }, process.env.JWT_SECRET, { expiresIn: '25h' });
 }
 
-function buildEmailHtml({ medName, dosage, timeStr, doseNum, markTakenUrl, appUrl }) {
+function buildEmailHtml({ medName, dosage, timeStr, doseNum, markTakenUrl, appUrl, type = 'now' }) {
+  const headings = {
+    before: { title: 'Upcoming dose in 5 minutes',         sub: 'Medication Reminder' },
+    now:    { title: 'Time to take your medication',       sub: 'Medication Reminder' },
+    missed: { title: 'Reminder — dose not yet taken',      sub: 'Missed Dose Alert'  },
+  };
+  const { title, sub } = headings[type] || headings.now;
+  const headerBg = type === 'missed' ? '#b45309' : '#0d9488';
+  const headerSub = type === 'missed' ? '#fde68a' : '#ccfbf1';
+
   return `
 <!DOCTYPE html>
 <html>
@@ -106,24 +115,18 @@ function buildEmailHtml({ medName, dosage, timeStr, doseNum, markTakenUrl, appUr
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-
-        <!-- Header -->
-        <tr><td style="background:#0d9488;padding:24px 32px;">
+        <tr><td style="background:${headerBg};padding:24px 32px;">
           <p style="margin:0;color:#ffffff;font-size:22px;font-weight:bold;">💊 SafeDose</p>
-          <p style="margin:4px 0 0;color:#ccfbf1;font-size:13px;">Medication Reminder</p>
+          <p style="margin:4px 0 0;color:${headerSub};font-size:13px;">${sub}</p>
         </td></tr>
-
-        <!-- Body -->
         <tr><td style="padding:32px;">
-          <p style="margin:0 0 8px;font-size:16px;color:#111827;font-weight:bold;">Time to take your medication</p>
+          <p style="margin:0 0 8px;font-size:16px;color:#111827;font-weight:bold;">${title}</p>
           <table style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;width:100%;margin:16px 0;" cellpadding="12" cellspacing="0">
             <tr><td>
               <p style="margin:0;font-size:18px;font-weight:bold;color:#065f46;">${medName}</p>
               <p style="margin:4px 0 0;font-size:14px;color:#374151;">${dosage} &nbsp;·&nbsp; Dose ${doseNum} at ${timeStr}</p>
             </td></tr>
           </table>
-
-          <!-- Mark as Taken button -->
           <table cellpadding="0" cellspacing="0" style="margin:24px 0;">
             <tr><td style="background:#0d9488;border-radius:8px;">
               <a href="${markTakenUrl}" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;">
@@ -131,17 +134,13 @@ function buildEmailHtml({ medName, dosage, timeStr, doseNum, markTakenUrl, appUr
               </a>
             </td></tr>
           </table>
-
           <p style="margin:0;font-size:13px;color:#6b7280;">
             Or <a href="${appUrl}" style="color:#0d9488;text-decoration:none;">open the app</a> to manage your medications.
           </p>
         </td></tr>
-
-        <!-- Footer -->
         <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
           <p style="margin:0;font-size:12px;color:#9ca3af;">SafeDose — Medication Safety Assistant. Do not reply to this email.</p>
         </td></tr>
-
       </table>
     </td></tr>
   </table>
@@ -149,9 +148,29 @@ function buildEmailHtml({ medName, dosage, timeStr, doseNum, markTakenUrl, appUr
 </html>`;
 }
 
+// ── Bitmask key for notifSent (stored in emailsSent field) ────
+// Bit 1  (1):  email  — 5 min before
+// Bit 2  (2):  email  — at scheduled time
+// Bit 4  (4):  email  — 30 min after (if not taken)
+// Bit 8  (8):  push   — 5 min before
+// Bit 16 (16): push   — at scheduled time
+// Bit 32 (32): push   — 30 min after (if not taken)
+//
+// The emailsSent field resets automatically each day (date prefix check
+// in parseEmailsSent), so dedup only covers the current day.
+
+async function sendPush(patient, payload) {
+  if (!patient.pushSubscription) return;
+  try {
+    await webpush.sendNotification(patient.pushSubscription, JSON.stringify(payload));
+  } catch (err) {
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      await Patient.findByIdAndUpdate(patient._id, { $unset: { pushSubscription: '' } });
+    }
+  }
+}
+
 // ── Combined push + email reminder scheduler ─────────────────
-// Queries Patient collection directly for notification preferences
-// (notifications and pushSubscription now live in Patient, not User).
 async function sendReminders() {
   try {
     const patients = await Patient.find({
@@ -167,9 +186,10 @@ async function sendReminders() {
     const today    = new Date(now); today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
     const APP_URL  = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
+    const wantsPush  = p => p.pushSubscription && p.notifications?.desktop;
+    const wantsEmail = p => p.notifications?.email;
 
     for (const patient of patients) {
-      // Fetch the linked User just for the email address
       const user = await User.findById(patient.linkedUserId).select('email').lean();
       if (!user) continue;
 
@@ -180,76 +200,97 @@ async function sendReminders() {
         $or: [{ isOngoing: true }, { endDate: { $gte: today } }],
       });
 
-      // ── Push notification — collect all doses due right now ──
-      const pushDue = [];
-
       for (const med of meds) {
-        const takenSet    = parseTakenToday(med.takenDoses);
-        const emailsMap   = parseEmailsSent(med.emailsSent);
-        let emailsUpdated = false;
+        const takenSet  = parseTakenToday(med.takenDoses);
+        const notifMap  = parseEmailsSent(med.emailsSent); // reuse same field
+        let   updated   = false;
 
-        (med.scheduleTimes || []).forEach((timeStr, i) => {
+        for (let i = 0; i < (med.scheduleTimes || []).length; i++) {
+          const timeStr   = med.scheduleTimes[i];
           const scheduled = parseTime12(timeStr);
-          if (!scheduled) return;
-          const diff = scheduled.getTime() - now.getTime();
+          if (!scheduled) continue;
 
-          // ── Push: due within next 5 min or just passed (within 1 min) ──
-          if (patient.pushSubscription && patient.notifications?.desktop) {
-            if (!takenSet.has(i) && diff <= 5 * 60 * 1000 && diff > -60 * 1000) {
-              pushDue.push({ name: med.name, dosage: med.dosage, timeStr });
+          // diff > 0 → dose is in the future; diff < 0 → dose is in the past
+          const diff  = scheduled.getTime() - now.getTime();
+          const taken = takenSet.has(i);
+          let   bits  = notifMap.get(i) || 0;
+
+          const markTakenUrl = () => {
+            const token = buildMarkTakenToken(med._id, i);
+            return `${APP_URL}/api/patient/mark-taken?token=${token}`;
+          };
+          const emailArgs = (type) => ({
+            medName: med.name, dosage: med.dosage, timeStr,
+            doseNum: i + 1, markTakenUrl: markTakenUrl(),
+            appUrl: `${APP_URL}/patient/dashboard`, type,
+          });
+
+          // ─────────────────────────────────────────────────────
+          // Window A: 5 minutes BEFORE the scheduled time
+          //   diff in (0, 5 min]
+          // ─────────────────────────────────────────────────────
+          if (diff > 0 && diff <= 5 * 60 * 1000) {
+            // Push (bit 8)
+            if (wantsPush(patient) && !(bits & 8)) {
+              await sendPush(patient, {
+                title: 'SafeDose — Upcoming Dose',
+                body:  `${med.name} (${med.dosage}) is due in 5 minutes at ${timeStr}`,
+                tag:   `sd-before-${med._id}-${i}`,
+              });
+              notifMap.set(i, bits | 8); bits = notifMap.get(i); updated = true;
+            }
+            // Email (bit 1)
+            if (wantsEmail(patient) && !(bits & 1)) {
+              sendEmail(user.email, `💊 SafeDose: ${med.name} due in 5 minutes`, buildEmailHtml(emailArgs('before'))).catch(() => {});
+              notifMap.set(i, bits | 1); bits = notifMap.get(i); updated = true;
             }
           }
 
-          // ── Email 1: fires at scheduled time (within 5 min window) ──
-          if (patient.notifications?.email) {
-            const bits = emailsMap.get(i) || 0;
-            if (!(bits & 1) && diff <= 0 && diff > -5 * 60 * 1000) {
-              const token        = buildMarkTakenToken(med._id, i);
-              const markTakenUrl = `${APP_URL}/api/patient/mark-taken?token=${token}`;
-              sendEmail(
-                user.email,
-                `💊 SafeDose: Time to take ${med.name}`,
-                buildEmailHtml({ medName: med.name, dosage: med.dosage, timeStr, doseNum: i + 1, markTakenUrl, appUrl: `${APP_URL}/patient/dashboard` })
-              ).catch(() => {});
-              emailsMap.set(i, bits | 1);
-              emailsUpdated = true;
+          // ─────────────────────────────────────────────────────
+          // Window B: AT the scheduled time (within 5 min after)
+          //   diff in (-5 min, 0]
+          // ─────────────────────────────────────────────────────
+          if (diff <= 0 && diff > -5 * 60 * 1000) {
+            // Push (bit 16)
+            if (wantsPush(patient) && !(bits & 16)) {
+              await sendPush(patient, {
+                title: 'SafeDose — Time to Take Your Dose',
+                body:  `Time to take ${med.name} (${med.dosage}) — Dose ${i + 1} at ${timeStr}`,
+                tag:   `sd-now-${med._id}-${i}`,
+              });
+              notifMap.set(i, bits | 16); bits = notifMap.get(i); updated = true;
             }
-
-            // ── Email 2: 30 min after scheduled time, only if not taken ──
-            if (!(bits & 2) && !takenSet.has(i) && diff <= -30 * 60 * 1000 && diff > -35 * 60 * 1000) {
-              const token        = buildMarkTakenToken(med._id, i);
-              const markTakenUrl = `${APP_URL}/api/patient/mark-taken?token=${token}`;
-              sendEmail(
-                user.email,
-                `⚠️ SafeDose: Reminder — ${med.name} not yet taken`,
-                buildEmailHtml({ medName: med.name, dosage: med.dosage, timeStr, doseNum: i + 1, markTakenUrl, appUrl: `${APP_URL}/patient/dashboard` })
-              ).catch(() => {});
-              emailsMap.set(i, bits | 2);
-              emailsUpdated = true;
+            // Email (bit 2)
+            if (wantsEmail(patient) && !(bits & 2)) {
+              sendEmail(user.email, `💊 SafeDose: Time to take ${med.name}`, buildEmailHtml(emailArgs('now'))).catch(() => {});
+              notifMap.set(i, bits | 2); bits = notifMap.get(i); updated = true;
             }
           }
-        });
 
-        if (emailsUpdated) {
-          await Medication.findByIdAndUpdate(med._id, { $set: { emailsSent: encodeEmailsSent(emailsMap) } });
+          // ─────────────────────────────────────────────────────
+          // Window C: 30 minutes AFTER scheduled time, not taken
+          //   diff in (-35 min, -30 min]
+          // ─────────────────────────────────────────────────────
+          if (!taken && diff <= -30 * 60 * 1000 && diff > -35 * 60 * 1000) {
+            // Push (bit 32)
+            if (wantsPush(patient) && !(bits & 32)) {
+              await sendPush(patient, {
+                title: 'SafeDose — Missed Dose Reminder',
+                body:  `You haven't taken ${med.name} (${med.dosage}) yet — due at ${timeStr}`,
+                tag:   `sd-missed-${med._id}-${i}`,
+              });
+              notifMap.set(i, bits | 32); bits = notifMap.get(i); updated = true;
+            }
+            // Email (bit 4)
+            if (wantsEmail(patient) && !(bits & 4)) {
+              sendEmail(user.email, `⚠️ SafeDose: ${med.name} not yet taken`, buildEmailHtml(emailArgs('missed'))).catch(() => {});
+              notifMap.set(i, bits | 4); updated = true;
+            }
+          }
         }
-      }
 
-      // Send push if any doses are due
-      if (pushDue.length && patient.pushSubscription) {
-        const body = pushDue.length === 1
-          ? `Time to take ${pushDue[0].name} (${pushDue[0].dosage}) at ${pushDue[0].timeStr}`
-          : `${pushDue.length} doses due: ${pushDue.map(d => d.name).join(', ')}`;
-        try {
-          await webpush.sendNotification(
-            patient.pushSubscription,
-            JSON.stringify({ title: 'SafeDose — Dose Reminder', body, tag: `safedose-${Date.now()}` })
-          );
-        } catch (err) {
-          if (err.statusCode === 410) {
-            // Stale subscription — clear it from Patient
-            await Patient.findByIdAndUpdate(patient._id, { $unset: { pushSubscription: '' } });
-          }
+        if (updated) {
+          await Medication.findByIdAndUpdate(med._id, { $set: { emailsSent: encodeEmailsSent(notifMap) } });
         }
       }
     }

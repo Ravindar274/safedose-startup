@@ -223,11 +223,6 @@ function AddMedicationModal({ onClose, onSaved }) {
     e.preventDefault();
     setError('');
 
-    if (!form.selectedDrug || form.selectedDrug.brandName.toLowerCase() !== brandQuery.trim().toLowerCase()) {
-      setError('Select a medication from the brand name search results.');
-      return;
-    }
-
     setLoading(true);
     try {
       const res  = await fetch('/api/patient/medications', {
@@ -478,7 +473,7 @@ function MedRow({ med, onToggleTaken }) {
 }
 
 // ── Caregiver Detail Panel ─────────────────────────────────────
-function CaregiverDetailPanel({ cg, status, onClose, onRequest, onCancel, sending, cancelling }) {
+function CaregiverDetailPanel({ cg, status, onClose, onRequest, onCancel, onRemove, sending, cancelling, removing }) {
   const profile = cg.caregiverProfile || {};
 
   const Field = ({ label, value, full }) => value ? (
@@ -561,9 +556,19 @@ function CaregiverDetailPanel({ cg, status, onClose, onRequest, onCancel, sendin
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 10 }}>
           {status === 'accepted' ? (
-            <span style={{ flex: 1, textAlign: 'center', padding: '10px', fontSize: 13, fontWeight: 600, color: '#0d9488', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
-              Already your caregiver
-            </span>
+            <>
+              <span style={{ flex: 1, textAlign: 'center', padding: '10px', fontSize: 13, fontWeight: 600, color: '#0d9488', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
+                Your caregiver
+              </span>
+              <button
+                className="btn"
+                style={{ flex: 1, fontSize: 13, background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}
+                onClick={onRemove}
+                disabled={removing}
+              >
+                {removing ? 'Removing…' : 'Remove Caregiver'}
+              </button>
+            </>
           ) : status === 'pending' ? (
             <>
               <span style={{ flex: 1, textAlign: 'center', padding: '10px', fontSize: 13, fontWeight: 600, color: '#92400e', background: '#fef3c7', borderRadius: 8, border: '1px solid #fde68a' }}>
@@ -606,6 +611,7 @@ function FindCaregiverModal({ onClose }) {
   const [loading,      setLoading]      = useState(true);
   const [sending,      setSending]      = useState(null);   // caregiverId being requested
   const [cancelling,   setCancelling]   = useState(null);   // caregiverId being cancelled
+  const [removing,     setRemoving]     = useState(null);   // caregiverId being removed
   const [error,        setError]        = useState('');
   const [successMsg,   setSuccessMsg]   = useState('');
   const [detailCg,     setDetailCg]     = useState(null);   // caregiver shown in detail panel
@@ -670,6 +676,22 @@ function FindCaregiverModal({ onClose }) {
       setError('Something went wrong.');
     } finally {
       setCancelling(null);
+    }
+  }
+
+  async function handleRemove(caregiverId) {
+    setRemoving(caregiverId);
+    setError('');
+    try {
+      const res = await fetch(`/api/patient/caregivers/${caregiverId}`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json(); setError(d.error || 'Failed to remove caregiver.'); return; }
+      setMyRequests(prev => prev.filter(r => (r.caregiverId?._id ?? r.caregiverId) !== caregiverId));
+      setSuccessMsg('Caregiver removed successfully.');
+      setDetailCg(null);
+    } catch {
+      setError('Something went wrong.');
+    } finally {
+      setRemoving(null);
     }
   }
 
@@ -758,8 +780,10 @@ function FindCaregiverModal({ onClose }) {
           onClose={() => setDetailCg(null)}
           onRequest={() => handleRequest(detailCg._id)}
           onCancel={() => handleCancel(detailCg._id)}
+          onRemove={() => handleRemove(detailCg._id)}
           sending={sending === detailCg._id}
           cancelling={cancelling === detailCg._id}
+          removing={removing === detailCg._id}
         />
       )}
     </>
@@ -775,7 +799,6 @@ function PatientDashboardInner() {
   const [medications,        setMedications]        = useState([]);
   const [loading,            setLoading]            = useState(true);
   const [showModal,          setShowModal]          = useState(false);
-  const [showCaregiverModal, setShowCaregiverModal] = useState(false);
   const [banner,             setBanner]             = useState('');
   const searchParams = useSearchParams();
 
@@ -999,25 +1022,6 @@ function PatientDashboardInner() {
           </p>
         </div>
 
-        {/* ── Find a Caregiver ── */}
-        <div className="card-box">
-          <div className="section-hdr">
-            <h3>Caregiver</h3>
-            <button className="btn btn-teal" onClick={() => setShowCaregiverModal(true)}>
-              <svg stroke="currentColor" fill="none" strokeWidth="2.5" viewBox="0 0 24 24"
-                   strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-              </svg>
-              Find a caregiver
-            </button>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--gray400)', margin: 0 }}>
-            Browse approved caregivers and send a hire request. Your caregiver can help track and manage your medications.
-          </p>
-        </div>
 
       </main>
 
@@ -1028,9 +1032,6 @@ function PatientDashboardInner() {
         />
       )}
 
-      {showCaregiverModal && (
-        <FindCaregiverModal onClose={() => setShowCaregiverModal(false)} />
-      )}
     </>
   );
 }

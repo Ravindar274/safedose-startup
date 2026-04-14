@@ -207,11 +207,6 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
     e.preventDefault();
     setError('');
 
-    if (!form.selectedDrug || form.selectedDrug.brandName.toLowerCase() !== brandQuery.trim().toLowerCase()) {
-      setError('Select a medication from the brand name search results.');
-      return;
-    }
-
     setLoading(true);
     try {
       const res  = await fetch(`/api/caregiver/patients/${patientId}/medications`, {

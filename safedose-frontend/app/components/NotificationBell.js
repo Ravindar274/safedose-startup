@@ -12,9 +12,10 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 export default function NotificationBell() {
-  const [open,    setOpen]    = useState(false);
-  const [prefs,   setPrefs]   = useState({ email: false, desktop: false });
-  const [saving,  setSaving]  = useState(false);
+  const [open,       setOpen]       = useState(false);
+  const [prefs,      setPrefs]      = useState({ email: false, desktop: false });
+  const [saving,     setSaving]     = useState(false);
+  const [permError,  setPermError]  = useState('');
   const dropRef = useRef(null);
 
   // ── Load preferences on mount ─────────────────────────────
@@ -45,40 +46,68 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // ── Desktop notification checker (fallback when tab is open, every 5 min) ──
-  const checkDosesDue = useCallback(() => {
+  // ── Desktop notification checker (when tab is open, every 1 min) ──
+  // Uses registration.showNotification() — required in Chrome when a
+  // service worker is active (new Notification() is blocked in that context).
+  const checkDosesDue = useCallback(async () => {
     if (!prefs.desktop) return;
     if (typeof window === 'undefined' || Notification.permission !== 'granted') return;
+    if (!('serviceWorker' in navigator)) return;
 
-    fetch('/api/patient/medications/today', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        const meds = data?.medications || [];
-        const now  = new Date();
+    let reg;
+    try { reg = await navigator.serviceWorker.ready; } catch { return; }
 
-        meds.forEach(med => {
-          const times = med.scheduleTimes || (med.scheduleTime ? [med.scheduleTime] : []);
-          times.forEach((timeStr, i) => {
-            if (med.takenToday?.[i]) return;
-            const scheduled = parseTime12(timeStr);
-            if (!scheduled) return;
-            const diff = scheduled.getTime() - now.getTime();
-            if (diff <= 5 * 60 * 1000 && diff > -30 * 60 * 1000) {
-              new Notification('SafeDose — Dose Reminder', {
-                body: `Time to take ${med.name} (${med.dosage}) — Dose ${i + 1} at ${timeStr}`,
-                icon: '/favicon.ico',
-              });
-            }
+    let data;
+    try {
+      const r = await fetch('/api/patient/medications/today', { credentials: 'include' });
+      if (!r.ok) return;
+      data = await r.json();
+    } catch { return; }
+
+    const meds = data?.medications || [];
+    const now  = new Date();
+
+    for (const med of meds) {
+      const times = med.scheduleTimes || [];
+      for (let i = 0; i < times.length; i++) {
+        const timeStr   = times[i];
+        const taken     = !!med.takenToday?.[i];
+        const scheduled = parseTime12(timeStr);
+        if (!scheduled) continue;
+        const diff = scheduled.getTime() - now.getTime();
+
+        // 5 min before
+        if (diff > 0 && diff <= 5 * 60 * 1000) {
+          reg.showNotification('SafeDose — Upcoming Dose', {
+            body: `${med.name} (${med.dosage}) is due in 5 minutes at ${timeStr}`,
+            icon: '/favicon.ico',
+            tag:  `sd-before-${med._id}-${i}`,
           });
-        });
-      })
-      .catch(() => {});
+        }
+        // At scheduled time (within 5 min after)
+        if (diff <= 0 && diff > -5 * 60 * 1000) {
+          reg.showNotification('SafeDose — Time to Take Your Dose', {
+            body: `Time to take ${med.name} (${med.dosage}) — Dose ${i + 1} at ${timeStr}`,
+            icon: '/favicon.ico',
+            tag:  `sd-now-${med._id}-${i}`,
+          });
+        }
+        // 30 min after if not taken
+        if (!taken && diff <= -30 * 60 * 1000 && diff > -35 * 60 * 1000) {
+          reg.showNotification('SafeDose — Missed Dose Reminder', {
+            body: `You haven't taken ${med.name} (${med.dosage}) yet — due at ${timeStr}`,
+            icon: '/favicon.ico',
+            tag:  `sd-missed-${med._id}-${i}`,
+          });
+        }
+      }
+    }
   }, [prefs.desktop]);
 
   useEffect(() => {
     if (!prefs.desktop) return;
     checkDosesDue();
-    const id = setInterval(checkDosesDue, 5 * 60 * 1000); // 5 minutes
+    const id = setInterval(checkDosesDue, 60 * 1000); // every 1 minute
     return () => clearInterval(id);
   }, [prefs.desktop, checkDosesDue]);
 
@@ -125,8 +154,9 @@ export default function NotificationBell() {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
           newPrefs.desktop = false;
-          alert('Desktop notifications were blocked by your browser. Please allow them in your browser settings.');
+          setPermError('Notifications blocked. Allow them in your browser settings.');
         } else {
+          setPermError('');
           await subscribeToWebPush();
         }
       } else {
@@ -215,6 +245,29 @@ export default function NotificationBell() {
               <div className="notif-toggle-thumb" />
             </div>
           </label>
+
+          {permError && (
+            <div style={{
+              margin: '4px 12px 8px',
+              padding: '8px 10px',
+              background: '#fef2f2',
+              border: '1px solid #fca5a5',
+              borderRadius: 6,
+              fontSize: 12,
+              color: '#dc2626',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 6,
+            }}>
+              <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+                   strokeLinecap="round" strokeLinejoin="round" width="13" height="13" style={{ flexShrink: 0, marginTop: 1 }}>
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              {permError}
+            </div>
+          )}
         </div>
       )}
     </div>

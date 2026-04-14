@@ -260,28 +260,21 @@ export default function MyMedications() {
   }
 
   const filteredMeds = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStr = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD', timezone-safe
 
     return medications.filter(med => {
       // 1. Search filter
-      const matchesSearch = med.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      const matchesSearch = med.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             med.genericName.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
 
-      const startDate = new Date(med.startDate);
-      startDate.setHours(0, 0, 0, 0);
-      
-      let endDate = null;
-      if (med.endDate) {
-        endDate = new Date(med.endDate);
-        endDate.setHours(0, 0, 0, 0);
-      }
+      const startStr = med.startDate ? med.startDate.slice(0, 10) : todayStr;
+      const endStr   = med.endDate   ? med.endDate.slice(0, 10)   : null;
 
-      const isStopped = med.status === 'stopped';
-      const isPast = isStopped || (!med.isOngoing && endDate && endDate < today);
-      const isUpcoming = !isPast && (startDate > today);
-      const isActive = !isPast && !isUpcoming;
+      const isStopped  = med.status === 'stopped';
+      const isPast     = isStopped || (!med.isOngoing && endStr && endStr < todayStr);
+      const isUpcoming = !isPast && startStr > todayStr;
+      const isActive   = !isPast && !isUpcoming;
 
       // 2. Tab filter
       if (activeTab === 'active' && !isActive) return false;

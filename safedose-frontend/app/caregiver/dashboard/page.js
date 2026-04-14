@@ -182,12 +182,12 @@ export default function CaregiverDashboard() {
 }
 
 function CaregiverDashboardInner() {
-  const [patients,  setPatients]  = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [requests,  setRequests]  = useState([]);
-  const [respondingId, setRespondingId] = useState(null);
-  const [banner,    setBanner]    = useState(''); // invitation accepted/declined banner
+  const [patients,      setPatients]      = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [showModal,     setShowModal]     = useState(false);
+  const [banner,        setBanner]        = useState('');
+  const [removeTarget,  setRemoveTarget]  = useState(null); // patient to confirm removal
+  const [removing,      setRemoving]      = useState(false);
   const searchParams = useSearchParams();
 
   const fetchPatients = useCallback(async () => {
@@ -203,20 +203,9 @@ function CaregiverDashboardInner() {
     }
   }, []);
 
-  const fetchRequests = useCallback(async () => {
-    try {
-      const res  = await fetch('/api/caregiver/requests');
-      const data = await res.json();
-      setRequests(data.requests || []);
-    } catch {
-      setRequests([]);
-    }
-  }, []);
-
   useEffect(() => {
     fetchPatients();
-    fetchRequests();
-  }, [fetchPatients, fetchRequests]);
+  }, [fetchPatients]);
 
   // Show banner when redirected back from email token link
   useEffect(() => {
@@ -225,22 +214,16 @@ function CaregiverDashboardInner() {
     if (inv === 'declined') setBanner('You declined the patient invitation.');
   }, [searchParams]);
 
-  async function handleRespond(requestId, action) {
-    setRespondingId(requestId);
+  async function confirmDeletePatient() {
+    if (!removeTarget) return;
+    setRemoving(true);
     try {
-      const res = await fetch(`/api/caregiver/requests/${requestId}/${action}`, { method: 'PATCH' });
-      if (!res.ok) return;
-      setRequests(prev => prev.filter(r => r._id !== requestId));
-      if (action === 'accept') fetchPatients(); // refresh roster
+      await fetch(`/api/caregiver/patients/${removeTarget._id}`, { method: 'DELETE' });
+      setPatients(prev => prev.filter(p => p._id !== removeTarget._id));
     } finally {
-      setRespondingId(null);
+      setRemoving(false);
+      setRemoveTarget(null);
     }
-  }
-
-  async function deletePatient(id) {
-    if (!confirm('Remove this patient from your roster?')) return;
-    await fetch(`/api/caregiver/patients/${id}`, { method: 'DELETE' });
-    setPatients(prev => prev.filter(p => p._id !== id));
   }
 
   function onPatientSaved(newPatient) {
@@ -345,62 +328,6 @@ function CaregiverDashboardInner() {
           </div>
         )}
 
-        {/* ── Pending hire requests ── */}
-        {requests.length > 0 && (
-          <div className="card-box" style={{ marginBottom: 24 }}>
-            <div className="section-hdr">
-              <h3>
-                Hire Requests
-                <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0d9488', color: '#fff', borderRadius: '50%', width: 20, height: 20, fontSize: 11, fontWeight: 700 }}>
-                  {requests.length}
-                </span>
-              </h3>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {requests.map(req => {
-                const p = req.patientUserId || {};
-                const dob = p.dateOfBirth
-                  ? new Date(p.dateOfBirth).toLocaleDateString('en-CA')
-                  : null;
-                return (
-                  <div key={req._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 14px', background: 'var(--gray50)', borderRadius: 10, border: '1px solid var(--gray200)' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--gray900)' }}>
-                        {p.firstName} {p.lastName}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--gray500)', marginTop: 2 }}>
-                        {p.email}{dob ? ` · DOB: ${dob}` : ''}
-                      </div>
-                      {req.message && (
-                        <div style={{ fontSize: 12, color: 'var(--gray500)', fontStyle: 'italic', marginTop: 4 }}>
-                          &ldquo;{req.message}&rdquo;
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                      <button
-                        className="btn btn-teal"
-                        style={{ fontSize: 12, padding: '6px 14px' }}
-                        disabled={respondingId === req._id}
-                        onClick={() => handleRespond(req._id, 'accept')}
-                      >
-                        {respondingId === req._id ? '…' : 'Accept'}
-                      </button>
-                      <button
-                        style={{ fontSize: 12, padding: '6px 14px', background: 'var(--gray100)', border: '1px solid var(--gray300)', borderRadius: 8, cursor: 'pointer', fontWeight: 500, color: 'var(--gray700)' }}
-                        disabled={respondingId === req._id}
-                        onClick={() => handleRespond(req._id, 'decline')}
-                      >
-                        Decline
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* ── Patient roster ── */}
         <div className="card-box">
           <div className="section-hdr">
@@ -425,7 +352,7 @@ function CaregiverDashboardInner() {
                 <>
                   <p className="roster-section-lbl">Missed Doses</p>
                   {missedPatients.map(p => (
-                    <PatientRow key={p._id} patient={p} onDelete={deletePatient} />
+                    <PatientRow key={p._id} patient={p} onDelete={p => setRemoveTarget(p)} />
                   ))}
                 </>
               )}
@@ -435,7 +362,7 @@ function CaregiverDashboardInner() {
                 <>
                   <p className="roster-section-lbl">On Track</p>
                   {onTrackPatients.map(p => (
-                    <PatientRow key={p._id} patient={p} onDelete={deletePatient} />
+                    <PatientRow key={p._id} patient={p} onDelete={p => setRemoveTarget(p)} />
                   ))}
                 </>
               )}
@@ -444,7 +371,49 @@ function CaregiverDashboardInner() {
         </div>
       </main>
 
-      {/* ── Modal ── */}
+      {/* ── Remove patient confirmation modal ── */}
+      {removeTarget && (
+        <div className="modal-overlay" onClick={() => setRemoveTarget(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Remove patient?</h3>
+              <button className="modal-close" onClick={() => setRemoveTarget(null)} type="button">
+                <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+                     strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--gray600)', margin: '16px 0 8px' }}>
+              Remove <strong>{removeTarget.firstName} {removeTarget.lastName}</strong> from your roster?
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--gray400)', margin: '0 0 24px' }}>
+              {removeTarget.assignmentRole === 'owner'
+                ? 'This will permanently delete the patient record and all their medication data.'
+                : 'This will only remove them from your roster. Their account and data will remain.'}
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                className="btn"
+                style={{ flex: 1, background: 'var(--gray100)', color: 'var(--gray800)' }}
+                onClick={() => setRemoveTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn"
+                style={{ flex: 1, background: 'var(--danger)', color: '#fff' }}
+                onClick={confirmDeletePatient}
+                disabled={removing}
+              >
+                {removing ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add patient modal ── */}
       {showModal && (
         <AddPatientModal
           onClose={() => setShowModal(false)}
@@ -488,7 +457,7 @@ function PatientRow({ patient, onDelete }) {
         }`}>
           {status === 'warning' ? 'Missed doses' : status === 'no-meds' ? 'Not scheduled' : 'On track'}
         </span>
-        <button className="icon-btn icon-btn-del" onClick={(e) => { e.stopPropagation(); onDelete(patient._id); }} title="Remove patient">
+        <button className="icon-btn icon-btn-del" onClick={(e) => { e.stopPropagation(); onDelete(patient); }} title="Remove patient">
           <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
                strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
             <polyline points="3 6 5 6 21 6"/>
