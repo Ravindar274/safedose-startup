@@ -33,7 +33,7 @@ spec:
               name: safedose-secrets
               key: JWT_SECRET
         - name: CLIENT_ORIGIN
-          value: "https://safedose-jet.vercel.app"
+          value: "https://www.safe-dose.org"
         - name: SENDGRID_API_KEY
           valueFrom:
             secretKeyRef:
