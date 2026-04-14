@@ -3,6 +3,7 @@
 'use client';
 import '../caregiver-dashboard.css';
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import NotificationBell from '../../components/NotificationBell';
 
 // ── Helpers ──────────────────────────────────────────────
@@ -18,9 +19,10 @@ function statusOf(patient) {
 
 // ── Add Patient Modal ─────────────────────────────────────
 function AddPatientModal({ onClose, onSaved }) {
-  const [mode, setMode]       = useState('new'); // 'new' | 'link'
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState('');
+  const [mode, setMode]         = useState('new'); // 'new' | 'link'
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
+  const [invitedEmail, setInvitedEmail] = useState(''); // set after invite sent
 
   // New patient fields
   const [form, setForm] = useState({
@@ -50,13 +52,46 @@ function AddPatientModal({ onClose, onSaved }) {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to add patient.'); return; }
-      onSaved(data.patient);
-      onClose();
+
+      if (data.invited) {
+        // Invitation sent — show confirmation, don't add to roster yet
+        setInvitedEmail(data.email);
+      } else {
+        onSaved(data.patient);
+        onClose();
+      }
     } catch {
       setError('Something went wrong.');
     } finally {
       setLoading(false);
     }
+  }
+
+  // ── Invitation sent confirmation ──
+  if (invitedEmail) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-box" onClick={e => e.stopPropagation()} style={{ textAlign: 'center', padding: '40px 32px' }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <svg stroke="#059669" fill="none" strokeWidth="2.5" viewBox="0 0 24 24"
+                 strokeLinecap="round" strokeLinejoin="round" width="26" height="26">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <h3 style={{ margin: '0 0 8px', fontSize: 17, color: 'var(--gray900)', fontWeight: 700 }}>Invitation sent!</h3>
+          <p style={{ margin: '0 0 6px', fontSize: 14, color: 'var(--gray600)' }}>
+            An email has been sent to
+          </p>
+          <p style={{ margin: '0 0 24px', fontSize: 14, fontWeight: 600, color: 'var(--gray800)' }}>
+            {invitedEmail}
+          </p>
+          <p style={{ margin: '0 0 28px', fontSize: 13, color: 'var(--gray500)' }}>
+            The patient will be added to your roster once they accept the invitation from their email.
+          </p>
+          <button className="btn btn-teal" style={{ minWidth: 120 }} onClick={onClose}>Done</button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -67,7 +102,7 @@ function AddPatientModal({ onClose, onSaved }) {
         <div className="modal-header">
           <div>
             <h3 className="modal-title">Add patient</h3>
-            <p className="modal-sub">Create a profile for someone without an account, or link an existing registered patient.</p>
+            <p className="modal-sub">Create a profile for someone without an account, or invite an existing registered patient.</p>
           </div>
           <button className="modal-close" onClick={onClose}>
             <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
@@ -81,14 +116,14 @@ function AddPatientModal({ onClose, onSaved }) {
         <div className="modal-tabs">
           <button
             className={`modal-tab${mode === 'new' ? ' active' : ''}`}
-            onClick={() => setMode('new')}
+            onClick={() => { setMode('new'); setError(''); }}
             type="button"
           >New patient</button>
           <button
             className={`modal-tab${mode === 'link' ? ' active' : ''}`}
-            onClick={() => setMode('link')}
+            onClick={() => { setMode('link'); setError(''); }}
             type="button"
-          >Link registered patient</button>
+          >Invite registered patient</button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -123,7 +158,7 @@ function AddPatientModal({ onClose, onSaved }) {
               <input type="email" placeholder="patient@example.com" value={linkedEmail}
                      onChange={e => setLinkedEmail(e.target.value)} required />
               <p style={{ fontSize: 12, color: 'var(--gray400)', marginTop: 6 }}>
-                The patient must already have a SafeDose account with role &quot;patient&quot;.
+                The patient must have a SafeDose account. They will receive an email to accept or decline.
               </p>
             </div>
           )}
@@ -131,7 +166,9 @@ function AddPatientModal({ onClose, onSaved }) {
           {error && <p className="form-error">{error}</p>}
 
           <button type="submit" className="btn btn-teal btn-full" disabled={loading}>
-            {loading ? 'Saving…' : mode === 'link' ? 'Link patient' : 'Create patient'}
+            {loading
+              ? (mode === 'link' ? 'Sending invite…' : 'Saving…')
+              : (mode === 'link' ? 'Send Invitation' : 'Create patient')}
           </button>
         </form>
       </div>
@@ -141,9 +178,13 @@ function AddPatientModal({ onClose, onSaved }) {
 
 // ── Main Page ─────────────────────────────────────────────
 export default function CaregiverDashboard() {
-  const [patients, setPatients] = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [patients,  setPatients]  = useState([]);
+  const [loading,   setLoading]   = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [requests,  setRequests]  = useState([]);
+  const [respondingId, setRespondingId] = useState(null);
+  const [banner,    setBanner]    = useState(''); // invitation accepted/declined banner
+  const searchParams = useSearchParams();
 
   const fetchPatients = useCallback(async () => {
     setLoading(true);
@@ -158,7 +199,39 @@ export default function CaregiverDashboard() {
     }
   }, []);
 
-  useEffect(() => { fetchPatients(); }, [fetchPatients]);
+  const fetchRequests = useCallback(async () => {
+    try {
+      const res  = await fetch('/api/caregiver/requests');
+      const data = await res.json();
+      setRequests(data.requests || []);
+    } catch {
+      setRequests([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPatients();
+    fetchRequests();
+  }, [fetchPatients, fetchRequests]);
+
+  // Show banner when redirected back from email token link
+  useEffect(() => {
+    const inv = searchParams.get('invitation');
+    if (inv === 'accepted') setBanner('You accepted the patient invitation. They have been added to your roster.');
+    if (inv === 'declined') setBanner('You declined the patient invitation.');
+  }, [searchParams]);
+
+  async function handleRespond(requestId, action) {
+    setRespondingId(requestId);
+    try {
+      const res = await fetch(`/api/caregiver/requests/${requestId}/${action}`, { method: 'PATCH' });
+      if (!res.ok) return;
+      setRequests(prev => prev.filter(r => r._id !== requestId));
+      if (action === 'accept') fetchPatients(); // refresh roster
+    } finally {
+      setRespondingId(null);
+    }
+  }
 
   async function deletePatient(id) {
     if (!confirm('Remove this patient from your roster?')) return;
@@ -259,6 +332,70 @@ export default function CaregiverDashboard() {
             </div>
           </div>
         </div>
+
+        {/* ── Invitation banner (from email token redirect) ── */}
+        {banner && (
+          <div style={{ padding: '12px 16px', marginBottom: 16, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ fontSize: 13, color: '#065f46' }}>{banner}</span>
+            <button onClick={() => setBanner('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 16 }}>✕</button>
+          </div>
+        )}
+
+        {/* ── Pending hire requests ── */}
+        {requests.length > 0 && (
+          <div className="card-box" style={{ marginBottom: 24 }}>
+            <div className="section-hdr">
+              <h3>
+                Hire Requests
+                <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0d9488', color: '#fff', borderRadius: '50%', width: 20, height: 20, fontSize: 11, fontWeight: 700 }}>
+                  {requests.length}
+                </span>
+              </h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {requests.map(req => {
+                const p = req.patientUserId || {};
+                const dob = p.dateOfBirth
+                  ? new Date(p.dateOfBirth).toLocaleDateString('en-CA')
+                  : null;
+                return (
+                  <div key={req._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 14px', background: 'var(--gray50)', borderRadius: 10, border: '1px solid var(--gray200)' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--gray900)' }}>
+                        {p.firstName} {p.lastName}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--gray500)', marginTop: 2 }}>
+                        {p.email}{dob ? ` · DOB: ${dob}` : ''}
+                      </div>
+                      {req.message && (
+                        <div style={{ fontSize: 12, color: 'var(--gray500)', fontStyle: 'italic', marginTop: 4 }}>
+                          &ldquo;{req.message}&rdquo;
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      <button
+                        className="btn btn-teal"
+                        style={{ fontSize: 12, padding: '6px 14px' }}
+                        disabled={respondingId === req._id}
+                        onClick={() => handleRespond(req._id, 'accept')}
+                      >
+                        {respondingId === req._id ? '…' : 'Accept'}
+                      </button>
+                      <button
+                        style={{ fontSize: 12, padding: '6px 14px', background: 'var(--gray100)', border: '1px solid var(--gray300)', borderRadius: 8, cursor: 'pointer', fontWeight: 500, color: 'var(--gray700)' }}
+                        disabled={respondingId === req._id}
+                        onClick={() => handleRespond(req._id, 'decline')}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Patient roster ── */}
         <div className="card-box">

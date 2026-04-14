@@ -3,6 +3,14 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+// Convert VAPID base64 public key to Uint8Array (required by Push API)
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
 export default function NotificationBell() {
   const [open,    setOpen]    = useState(false);
   const [prefs,   setPrefs]   = useState({ email: false, desktop: false });
@@ -21,6 +29,13 @@ export default function NotificationBell() {
       .catch(() => {});
   }, []);
 
+  // ── Register service worker once on mount ─────────────────
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
+
   // ── Close dropdown on outside click ──────────────────────
   useEffect(() => {
     function handler(e) {
@@ -30,7 +45,7 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // ── Desktop notification checker (fires every 60 s) ──────
+  // ── Desktop notification checker (fallback when tab is open, every 5 min) ──
   const checkDosesDue = useCallback(() => {
     if (!prefs.desktop) return;
     if (typeof window === 'undefined' || Notification.permission !== 'granted') return;
@@ -48,7 +63,6 @@ export default function NotificationBell() {
             const scheduled = parseTime12(timeStr);
             if (!scheduled) return;
             const diff = scheduled.getTime() - now.getTime();
-            // Fire for doses due within the next 5 minutes or already due
             if (diff <= 5 * 60 * 1000 && diff > -30 * 60 * 1000) {
               new Notification('SafeDose — Dose Reminder', {
                 body: `Time to take ${med.name} (${med.dosage}) — Dose ${i + 1} at ${timeStr}`,
@@ -64,19 +78,59 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!prefs.desktop) return;
     checkDosesDue();
-    const id = setInterval(checkDosesDue, 60_000);
+    const id = setInterval(checkDosesDue, 5 * 60 * 1000); // 5 minutes
     return () => clearInterval(id);
   }, [prefs.desktop, checkDosesDue]);
+
+  // ── Subscribe to Web Push ─────────────────────────────────
+  async function subscribeToWebPush() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidKey) return;
+
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly:      true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+
+      await fetch('/api/push/subscribe', {
+        method:      'POST',
+        headers:     { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body:        JSON.stringify({ subscription }),
+      });
+    } catch { /* push not supported or blocked */ }
+  }
+
+  async function unsubscribeFromWebPush() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+
+      await fetch('/api/push/subscribe', {
+        method:      'DELETE',
+        credentials: 'include',
+      });
+    } catch { /* ignore */ }
+  }
 
   // ── Toggle handler ────────────────────────────────────────
   async function handleToggle(key) {
     const newPrefs = { ...prefs, [key]: !prefs[key] };
 
-    if (key === 'desktop' && newPrefs.desktop) {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        newPrefs.desktop = false;
-        alert('Desktop notifications were blocked by your browser. Please allow them in your browser settings.');
+    if (key === 'desktop') {
+      if (newPrefs.desktop) {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          newPrefs.desktop = false;
+          alert('Desktop notifications were blocked by your browser. Please allow them in your browser settings.');
+        } else {
+          await subscribeToWebPush();
+        }
+      } else {
+        await unsubscribeFromWebPush();
       }
     }
 
@@ -153,7 +207,7 @@ export default function NotificationBell() {
               </svg>
               <div>
                 <p className="notif-row-title">Desktop notifications</p>
-                <p className="notif-row-sub">Dose reminders while browsing</p>
+                <p className="notif-row-sub">Dose reminders even when tab is closed</p>
               </div>
             </div>
             <div className={`notif-toggle${prefs.desktop ? ' on' : ''}`}
