@@ -10,7 +10,7 @@ import Assignment       from '../models/Assignment.js';
 import CaregiverRequest from '../models/CaregiverRequest.js';
 import CaregiverProfile from '../models/CaregiverProfile.js';
 import { getPatientAdherenceSummary } from '../lib/adherence.js';
-import { searchOpenFDADrugs, validateOpenFDADrugSelection } from '../lib/openfda.js';
+import { searchOpenFDADrugs } from '../lib/openfda.js';
 import { sendEmail } from '../lib/sendEmail.js';
 
 const router = Router();
@@ -286,22 +286,17 @@ router.post('/medications', async (req, res) => {
       return res.status(400).json({ error: 'All required fields must be filled.' });
     }
 
-    const matchedDrug = await validateOpenFDADrugSelection(selectedDrug);
-    if (!matchedDrug) {
-      return res.status(400).json({ error: 'Please choose a medication from the FDA search results.' });
-    }
-
     const patient = await getOrCreatePatient(req.user.userId);
 
     const medication = await Medication.create({
       patientId:    patient._id,
       addedBy:      req.user.userId,
-      name:         matchedDrug.brandName,
-      genericName:  matchedDrug.genericName || matchedDrug.brandName,
+      name:         selectedDrug.brandName,
+      genericName:  selectedDrug.genericName || selectedDrug.brandName,
       dosage,
       frequency,
       scheduleTimes,
-      rxcui:        matchedDrug.rxcui || '',
+      rxcui:        selectedDrug.rxcui || '',
       isOngoing:    isOngoing ?? true,
       startDate:    startDate   ? new Date(startDate)  : new Date(),
       endDate:      (!isOngoing && endDate) ? new Date(endDate) : null,
@@ -435,14 +430,24 @@ router.get('/caregivers', async (req, res) => {
       .select('firstName lastName email createdAt')
       .lean();
 
+    // Find this patient's record to check assignments
+    const patient = await Patient.findOne({ linkedUserId: req.user.userId }).lean();
+
     const caregivers = await Promise.all(users.map(async u => {
       const profile = await CaregiverProfile.findOne({ userId: u._id }).lean();
+
+      // Check if this caregiver is already assigned to this patient
+      const isAssigned = patient
+        ? !!(await Assignment.findOne({ caregiverId: u._id, patientId: patient._id }))
+        : false;
+
       return {
-        _id:       u._id,
-        firstName: u.firstName,
-        lastName:  u.lastName,
-        email:     u.email,
-        createdAt: u.createdAt,
+        _id:        u._id,
+        firstName:  u.firstName,
+        lastName:   u.lastName,
+        email:      u.email,
+        createdAt:  u.createdAt,
+        isAssigned,
         caregiverProfile: profile ? {
           specialization:  profile.specialization,
           qualification:   profile.qualification,
@@ -482,12 +487,100 @@ router.delete('/caregivers/:id/request', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// GET /api/patient/caregiver-invites
+// Returns pending invites sent TO this patient by caregivers.
+// ─────────────────────────────────────────────────────────────
+router.get('/caregiver-invites', async (req, res) => {
+  try {
+    const invites = await CaregiverRequest.find({
+      patientUserId: req.user.userId,
+      initiatedBy:   'caregiver',
+      status:        'pending',
+    })
+      .populate('caregiverId', 'firstName lastName email caregiverProfile createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    return res.json({ invites });
+  } catch (err) {
+    console.error('[GET CAREGIVER INVITES]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PATCH /api/patient/caregiver-invites/:id/accept
+// Patient accepts a caregiver-initiated invite in-app.
+// ─────────────────────────────────────────────────────────────
+router.patch('/caregiver-invites/:id/accept', async (req, res) => {
+  try {
+    const request = await CaregiverRequest.findOne({
+      _id:           req.params.id,
+      patientUserId: req.user.userId,
+      initiatedBy:   'caregiver',
+      status:        'pending',
+    });
+    if (!request) return res.status(404).json({ error: 'Invite not found.' });
+
+    request.status = 'accepted';
+    await request.save();
+
+    let patient = await Patient.findOne({ linkedUserId: req.user.userId });
+    if (!patient) {
+      const u = await User.findById(req.user.userId);
+      if (u) {
+        patient = await Patient.create({
+          linkedUserId: u._id,
+          firstName:    u.firstName,
+          lastName:     u.lastName,
+          email:        u.email,
+        });
+      }
+    }
+    if (patient) {
+      const exists = await Assignment.findOne({ caregiverId: request.caregiverId, patientId: patient._id });
+      if (!exists) {
+        await Assignment.create({ caregiverId: request.caregiverId, patientId: patient._id, role: 'caregiver' });
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[ACCEPT CAREGIVER INVITE]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PATCH /api/patient/caregiver-invites/:id/decline
+// Patient declines a caregiver-initiated invite in-app.
+// ─────────────────────────────────────────────────────────────
+router.patch('/caregiver-invites/:id/decline', async (req, res) => {
+  try {
+    const request = await CaregiverRequest.findOne({
+      _id:           req.params.id,
+      patientUserId: req.user.userId,
+      initiatedBy:   'caregiver',
+      status:        'pending',
+    });
+    if (!request) return res.status(404).json({ error: 'Invite not found.' });
+
+    request.status = 'declined';
+    await request.save();
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[DECLINE CAREGIVER INVITE]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // GET /api/patient/caregiver-requests
 // Returns all requests this patient has sent (with current status).
 // ─────────────────────────────────────────────────────────────
 router.get('/caregiver-requests', async (req, res) => {
   try {
-    const requests = await CaregiverRequest.find({ patientUserId: req.user.userId })
+    const requests = await CaregiverRequest.find({ patientUserId: req.user.userId, initiatedBy: 'patient' })
       .populate('caregiverId', 'firstName lastName email caregiverProfile')
       .sort({ createdAt: -1 })
       .lean();
@@ -630,5 +723,34 @@ async function sendInvitationEmail(request, patientUserId, caregiver) {
     html
   ).catch(() => {});
 }
+
+// ─────────────────────────────────────────────────────────────
+// DELETE /api/patient/caregivers/:id
+// Patient removes an accepted caregiver from their care team.
+// Deletes the Assignment and marks the CaregiverRequest as declined.
+// ─────────────────────────────────────────────────────────────
+router.delete('/caregivers/:id', async (req, res) => {
+  try {
+    const patient = await getOrCreatePatient(req.user.userId);
+    if (!patient) return res.status(404).json({ error: 'Patient not found.' });
+
+    const deleted = await Assignment.findOneAndDelete({
+      caregiverId: req.params.id,
+      patientId:   patient._id,
+    });
+    if (!deleted) return res.status(404).json({ error: 'Caregiver not assigned to you.' });
+
+    // Clean up the request record so the patient can re-request later
+    await CaregiverRequest.deleteMany({
+      patientUserId: req.user.userId,
+      caregiverId:   req.params.id,
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE CAREGIVER]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
 
 export default router;

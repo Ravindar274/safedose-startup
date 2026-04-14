@@ -315,6 +315,7 @@ export default function DrugDirectory() {
   const [patients,        setPatients]        = useState([]);
   const [modal,           setModal]           = useState(null);
   const [successMsg,      setSuccessMsg]      = useState('');
+  const [noPatientError,  setNoPatientError]  = useState(false);
 
   // Fetch caregiver's patient roster once
   useEffect(() => {
@@ -361,7 +362,8 @@ export default function DrugDirectory() {
 
   function handleAdd(drug) {
     if (!patients.length) {
-      alert('You have no patients yet. Add a patient from the dashboard first.');
+      setNoPatientError(true);
+      setTimeout(() => setNoPatientError(false), 4000);
       return;
     }
     setModal(drug);
@@ -414,6 +416,19 @@ export default function DrugDirectory() {
               <polyline points="20 6 9 17 4 12"/>
             </svg>
             {successMsg}
+          </div>
+        )}
+
+        {/* ── No-patient warning ── */}
+        {noPatientError && (
+          <div className="drug-success-banner" style={{ background: '#fef3c7', color: '#92400e', borderColor: '#fbbf24' }}>
+            <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+                 strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            You have no patients yet. Add a patient from the dashboard first.
           </div>
         )}
 

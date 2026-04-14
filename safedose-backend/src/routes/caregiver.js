@@ -463,24 +463,30 @@ router.post('/patients', async (req, res) => {
         }
       }
 
-      // Block duplicate pending invite
-      const existingRequest = await CaregiverRequest.findOne({
+      // Upsert: reset to pending if an old accepted/declined request exists,
+      // or block if one is already pending
+      const existing = await CaregiverRequest.findOne({
         patientUserId: patientUser._id,
         caregiverId:   req.user.userId,
         initiatedBy:   'caregiver',
-        status:        'pending',
       });
-      if (existingRequest) {
+      if (existing?.status === 'pending') {
         return res.status(409).json({ error: 'An invitation is already pending for this patient.' });
       }
 
-      // Create the invite request
-      const request = await CaregiverRequest.create({
-        patientUserId: patientUser._id,
-        caregiverId:   req.user.userId,
-        initiatedBy:   'caregiver',
-        status:        'pending',
-      });
+      let request;
+      if (existing) {
+        // Re-invite after a previous accept/decline — reset to pending
+        existing.status = 'pending';
+        request = await existing.save();
+      } else {
+        request = await CaregiverRequest.create({
+          patientUserId: patientUser._id,
+          caregiverId:   req.user.userId,
+          initiatedBy:   'caregiver',
+          status:        'pending',
+        });
+      }
 
       // Send invitation email to the patient
       const caregiver = await User.findById(req.user.userId).select('firstName lastName').lean();
@@ -494,11 +500,20 @@ router.post('/patients', async (req, res) => {
       return res.status(400).json({ error: 'First and last name are required.' });
     }
 
+    const normalizedEmail = email?.trim().toLowerCase() || null;
+
+    if (normalizedEmail) {
+      const duplicate = await Patient.findOne({ email: normalizedEmail });
+      if (duplicate) {
+        return res.status(409).json({ error: 'A patient with this email already exists.' });
+      }
+    }
+
     const patient = await Patient.create({
       linkedUserId: null,
       firstName,
       lastName,
-      email:       email       || '',
+      email:       normalizedEmail,
       dateOfBirth: dateOfBirth || null,
       notes:       notes       || '',
     });
@@ -512,6 +527,12 @@ router.post('/patients', async (req, res) => {
     return res.status(201).json({ patient });
   } catch (err) {
     console.error('[POST PATIENT ERROR]', err);
+    if (err.code === 11000) {
+      if (err.keyPattern?.email) {
+        return res.status(409).json({ error: 'A patient with this email already exists.' });
+      }
+      return res.status(409).json({ error: 'An invitation is already pending for this patient.' });
+    }
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -610,12 +631,21 @@ router.delete('/patients/:id', async (req, res) => {
 
     if (assignment.role === 'owner') {
       // Delete the patient and all caregiver assignments for them
-      await Patient.findByIdAndDelete(req.params.id);
+      const patient = await Patient.findByIdAndDelete(req.params.id);
       await Medication.deleteMany({ patientId: req.params.id });
       await Assignment.deleteMany({ patientId: req.params.id });
+      // Clean up any invite requests so the caregiver can re-invite later
+      if (patient?.linkedUserId) {
+        await CaregiverRequest.deleteMany({ patientUserId: patient.linkedUserId, caregiverId: req.user.userId });
+      }
     } else {
       // Just remove this caregiver's link
       await Assignment.findByIdAndDelete(assignment._id);
+      // Clean up the invite request so the caregiver can re-invite later
+      const patient = await Patient.findById(req.params.id);
+      if (patient?.linkedUserId) {
+        await CaregiverRequest.deleteMany({ patientUserId: patient.linkedUserId, caregiverId: req.user.userId });
+      }
     }
 
     return res.json({ message: 'Patient removed.' });
@@ -648,8 +678,9 @@ router.get('/drugs', async (req, res) => {
 router.get('/requests', async (req, res) => {
   try {
     const requests = await CaregiverRequest.find({
-      caregiverId: req.user.userId,
-      status: 'pending',
+      caregiverId:  req.user.userId,
+      initiatedBy:  'patient',
+      status:       'pending',
     })
       .populate('patientUserId', 'firstName lastName email dateOfBirth')
       .sort({ createdAt: -1 })
