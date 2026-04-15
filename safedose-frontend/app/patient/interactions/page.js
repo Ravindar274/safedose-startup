@@ -34,6 +34,7 @@ function normalize(str) {
 export default function PatientSafetyCenterPage() {
   const [allMeds, setAllMeds] = useState([]);
   const [todayMeds, setTodayMeds] = useState([]);
+  const [openFdaInteractions, setOpenFdaInteractions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -42,20 +43,22 @@ export default function PatientSafetyCenterPage() {
       setLoading(true);
       setError('');
       try {
-        const [allRes, todayRes] = await Promise.all([
+        const [allRes, todayRes, fdaRes] = await Promise.all([
           fetch('/api/patient/medications'),
           fetch('/api/patient/medications/today'),
+          fetch('/api/patient/interactions/openfda'),
         ]);
 
-        const [allJson, todayJson] = await Promise.all([allRes.json(), todayRes.json()]);
+        const [allJson, todayJson, fdaJson] = await Promise.all([allRes.json(), todayRes.json(), fdaRes.json()]);
 
-        if (!allRes.ok || !todayRes.ok) {
-          setError(allJson.error || todayJson.error || 'Failed to load safety data.');
+        if (!allRes.ok || !todayRes.ok || !fdaRes.ok) {
+          setError(allJson.error || todayJson.error || fdaJson.error || 'Failed to load safety data.');
           return;
         }
 
         setAllMeds(allJson.medications || []);
         setTodayMeds(todayJson.medications || []);
+        setOpenFdaInteractions(fdaJson.interactions || []);
       } catch {
         setError('Could not load safety data.');
       } finally {
@@ -117,6 +120,18 @@ export default function PatientSafetyCenterPage() {
   const reviewItems = useMemo(() => {
     const items = [];
 
+    openFdaInteractions.forEach((pair) => {
+      const type = pair.severity === 'High' ? 'High' : pair.severity === 'Low' ? 'Low' : 'Medium';
+      const medA = pair.medicationA?.name || pair.medicationA?.genericName || 'Medication A';
+      const medB = pair.medicationB?.name || pair.medicationB?.genericName || 'Medication B';
+
+      items.push({
+        type,
+        title: `OpenFDA: possible interaction between ${medA} and ${medB}`,
+        detail: pair.evidence || 'OpenFDA label text indicates this pair may interact. Review with your caregiver, pharmacist, or doctor.',
+      });
+    });
+
     interactionFlags.forEach((med) => {
       items.push({
         type: 'High',
@@ -158,17 +173,26 @@ export default function PatientSafetyCenterPage() {
     }
 
     return items;
-  }, [interactionFlags, duplicateGenericGroups, doseRisk, highLoad, activeMeds.length]);
+  }, [openFdaInteractions, interactionFlags, duplicateGenericGroups, doseRisk, highLoad, activeMeds.length]);
 
   const safetyScore = useMemo(() => {
     let score = 100;
+    const highOpenFda = openFdaInteractions.filter((item) => item.severity === 'High').length;
+    const mediumOpenFda = openFdaInteractions.filter((item) => item.severity !== 'High' && item.severity !== 'Low').length;
+    const lowOpenFda = openFdaInteractions.filter((item) => item.severity === 'Low').length;
+
+    score -= highOpenFda * 18;
+    score -= mediumOpenFda * 10;
+    score -= lowOpenFda * 4;
     score -= interactionFlags.length * 25;
     score -= duplicateGenericGroups.length * 15;
     score -= Math.min(doseRisk.missed * 5, 30);
     score -= Math.min(doseRisk.due * 2, 10);
     if (highLoad) score -= 8;
     return Math.max(0, score);
-  }, [interactionFlags.length, duplicateGenericGroups.length, doseRisk, highLoad]);
+  }, [openFdaInteractions, interactionFlags.length, duplicateGenericGroups.length, doseRisk, highLoad]);
+
+  const interactionAlertCount = openFdaInteractions.length + interactionFlags.length;
 
   return (
     <>
@@ -194,9 +218,9 @@ export default function PatientSafetyCenterPage() {
           </div>
 
           <div className="stat-card">
-            <div className="stat-val">{interactionFlags.length}</div>
+            <div className="stat-val">{interactionAlertCount}</div>
             <div className="stat-lbl">Interaction flags</div>
-            <div className="stat-change">from medication records</div>
+            <div className="stat-change">OpenFDA and medication records</div>
           </div>
 
           <div className="stat-card">
