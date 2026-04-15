@@ -29,6 +29,28 @@ const FREQ_COUNT = {
   'once in a week':    1,
 };
 
+function cleanDrugText(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getDrugDisplayName(drug) {
+  const brandName = cleanDrugText(drug?.brandName);
+  const genericName = cleanDrugText(drug?.genericName);
+
+  if (brandName && brandName.toLowerCase() !== 'unknown') {
+    return brandName;
+  }
+
+  return genericName;
+}
+
+function hasDrugDisplayName(drug) {
+  return !!getDrugDisplayName(drug);
+}
+
 // ── Time helpers ──────────────────────────────────────────────
 function toInputTime(timeStr) {
   if (!timeStr) return '08:00';
@@ -146,7 +168,9 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
     }
   }
 
-  const displayName = drug.brandName !== 'Unknown' ? drug.brandName : drug.genericName;
+  const displayName = getDrugDisplayName(drug);
+  const genericName = cleanDrugText(drug.genericName);
+  const brandName = cleanDrugText(drug.brandName);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -157,8 +181,8 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
             <h3 className="modal-title">Add to patient</h3>
             <p className="modal-sub">
               <strong style={{ textTransform: 'capitalize' }}>{displayName.toLowerCase()}</strong>
-              {drug.genericName && drug.brandName !== 'Unknown' && (
-                <span style={{ color: 'var(--gray400)' }}> · {drug.genericName.toLowerCase()}</span>
+              {genericName && brandName.toLowerCase() !== 'unknown' && (
+                <span style={{ color: 'var(--gray400)' }}> · {genericName.toLowerCase()}</span>
               )}
             </p>
           </div>
@@ -257,7 +281,9 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
 
 // ── Drug Card ─────────────────────────────────────────────────
 function DrugCard({ drug, onAdd }) {
-  const displayName = drug.brandName !== 'Unknown' ? drug.brandName : drug.genericName;
+  const displayName = getDrugDisplayName(drug);
+  const genericName = cleanDrugText(drug.genericName);
+  const brandName = cleanDrugText(drug.brandName);
 
   return (
     <div className="drug-card">
@@ -270,8 +296,8 @@ function DrugCard({ drug, onAdd }) {
         </div>
         <div className="drug-card-head">
           <h4 className="drug-card-name">{displayName.toLowerCase()}</h4>
-          {drug.genericName && drug.brandName !== 'Unknown' && (
-            <p className="drug-card-generic">{drug.genericName.toLowerCase()}</p>
+          {genericName && brandName.toLowerCase() !== 'unknown' && (
+            <p className="drug-card-generic">{genericName.toLowerCase()}</p>
           )}
         </div>
       </div>
@@ -356,6 +382,8 @@ export default function DrugDirectory() {
   useEffect(() => {
     fetchDrugs(debouncedQuery, skip);
   }, [debouncedQuery, skip, fetchDrugs]);
+
+  const visibleDrugs = drugs.filter(hasDrugDisplayName);
 
   const page     = Math.floor(skip / PAGE_SIZE) + 1;
   const maxPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -443,7 +471,7 @@ export default function DrugDirectory() {
         )}
 
         {/* ── Empty state ── */}
-        {!loading && !fetchError && drugs.length === 0 && (
+        {!loading && !fetchError && visibleDrugs.length === 0 && (
           <div className="drug-empty">
             <div className="drug-empty-icon">
               <svg stroke="currentColor" fill="none" strokeWidth="1.5" viewBox="0 0 24 24"
@@ -460,10 +488,10 @@ export default function DrugDirectory() {
         )}
 
         {/* ── Cards grid ── */}
-        {!loading && drugs.length > 0 && (
+        {!loading && visibleDrugs.length > 0 && (
           <>
             <div className="drug-grid">
-              {drugs.map((drug, idx) => (
+              {visibleDrugs.map((drug, idx) => (
                 <DrugCard
                   key={drug.id && drug.brandName && drug.genericName ? drug.id + drug.brandName + drug.genericName : `${skip}-${idx}`}
                   drug={drug}
