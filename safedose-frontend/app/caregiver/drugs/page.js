@@ -7,7 +7,7 @@ import '../../patient/medications/medications.css';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 30;
 
 const FREQUENCIES = [
   'once daily',
@@ -315,6 +315,7 @@ export default function DrugDirectory() {
   const [patients,        setPatients]        = useState([]);
   const [modal,           setModal]           = useState(null);
   const [successMsg,      setSuccessMsg]      = useState('');
+  const [noPatientError,  setNoPatientError]  = useState(false);
 
   // Fetch caregiver's patient roster once
   useEffect(() => {
@@ -361,7 +362,8 @@ export default function DrugDirectory() {
 
   function handleAdd(drug) {
     if (!patients.length) {
-      alert('You have no patients yet. Add a patient from the dashboard first.');
+      setNoPatientError(true);
+      setTimeout(() => setNoPatientError(false), 4000);
       return;
     }
     setModal(drug);
@@ -417,6 +419,19 @@ export default function DrugDirectory() {
           </div>
         )}
 
+        {/* ── No-patient warning ── */}
+        {noPatientError && (
+          <div className="drug-success-banner" style={{ background: '#fef3c7', color: '#92400e', borderColor: '#fbbf24' }}>
+            <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+                 strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            You have no patients yet. Add a patient from the dashboard first.
+          </div>
+        )}
+
         {/* ── Loading ── */}
         {loading && (
           <div className="drug-loading">Loading medications…</div>
@@ -448,9 +463,9 @@ export default function DrugDirectory() {
         {!loading && drugs.length > 0 && (
           <>
             <div className="drug-grid">
-              {drugs.map(drug => (
+              {drugs.map((drug, idx) => (
                 <DrugCard
-                  key={drug.id + drug.brandName + drug.genericName}
+                  key={drug.id && drug.brandName && drug.genericName ? drug.id + drug.brandName + drug.genericName : `${skip}-${idx}`}
                   drug={drug}
                   onAdd={handleAdd}
                 />

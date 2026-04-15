@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: safedose-chat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chat
+  template:
+    metadata:
+      labels:
+        app: chat
+    spec:
+      containers:
+      - name: chat-app
+        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-chat-service-image:v3
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: NODE_ENV
+          value: "production"
+        # Add any other .env variables your chat service needs here
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: MONGODB_URI
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: GEMINI_API_KEY
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: JWT_SECRET
+        - name: GEMINI_MODEL
+          value: "gemini-2.5-flash-lite"
+        - name: CLIENT_ORIGIN
+          value: "https://safedose-jet.vercel.app"
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-service
+spec:
+  type: ClusterIP 
+  selector:
+    app: chat
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080

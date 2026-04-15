@@ -4,10 +4,11 @@
 import '../app.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AuthProvider } from '../context/AuthContext';
+import { useState, useEffect } from 'react';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import ChatFab from '../components/ChatFab';
 
-const navItems = [
+const staticNavItems = [
   {
     href: '/caregiver/dashboard',
     label: 'My Patients',
@@ -57,8 +58,23 @@ const navItems = [
   },
 ];
 
-export default function CaregiverLayout({ children }) {
+function CaregiverShell({ children }) {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    fetch('/api/caregiver/requests')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.requests) setPendingCount(data.requests.length); })
+      .catch(() => {});
+  }, [pathname]);
+
+  const fullName = user ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() : '';
+  const initials = fullName
+    ? fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    : '?';
+  const roleLabel = user?.role ?? 'caregiver';
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -66,7 +82,6 @@ export default function CaregiverLayout({ children }) {
   }
 
   return (
-    <AuthProvider>
     <div className="app-layout">
 
       {/* ── Sidebar ── */}
@@ -78,17 +93,17 @@ export default function CaregiverLayout({ children }) {
 
         {/* User info */}
         <div className="sb-user">
-          <div className="sb-avatar">RC</div>
+          <div className="sb-avatar">{initials}</div>
           <div>
-            <p className="sb-user-name">Ravindar Caregiver</p>
-            <p className="sb-user-role">caregiver</p>
+            <p className="sb-user-name">{fullName || 'Loading…'}</p>
+            <p className="sb-user-role">{roleLabel}</p>
           </div>
         </div>
 
         {/* Nav */}
         <nav className="sb-nav">
           <p className="sb-section-lbl">Caregiver</p>
-          {navItems.map(item => (
+          {staticNavItems.map(item => (
             <Link
               key={item.href}
               href={item.href}
@@ -98,6 +113,37 @@ export default function CaregiverLayout({ children }) {
               {item.label}
             </Link>
           ))}
+          {/* Patient Requests with live badge */}
+          <Link
+            href="/caregiver/requests"
+            className={`sb-link${pathname === '/caregiver/requests' ? ' active' : ''}`}
+            style={{ justifyContent: 'space-between' }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="sb-icon">
+                <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+                     strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+              </span>
+              Patient Requests
+            </span>
+            {pendingCount > 0 && (
+              <span style={{
+                background: '#f59e0b',
+                color: '#fff',
+                fontSize: 10,
+                fontWeight: 700,
+                borderRadius: 10,
+                padding: '1px 6px',
+                minWidth: 18,
+                textAlign: 'center',
+              }}>
+                {pendingCount}
+              </span>
+            )}
+          </Link>
         </nav>
 
         {/* Logout */}
@@ -122,7 +168,14 @@ export default function CaregiverLayout({ children }) {
       </div>
 
     </div>
-    <ChatFab />
+  );
+}
+
+export default function CaregiverLayout({ children }) {
+  return (
+    <AuthProvider>
+      <CaregiverShell>{children}</CaregiverShell>
+      <ChatFab />
     </AuthProvider>
   );
 }

@@ -4,7 +4,8 @@
 import '../app.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AuthProvider } from '../context/AuthContext';
+import { useState, useEffect } from 'react';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import ChatFab from '../components/ChatFab';
 
 const navItems = [
@@ -70,6 +71,19 @@ const navItems = [
     ),
   },
   {
+    href: '/patient/caregivers',
+    label: 'Caregivers',
+    icon: (
+      <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+           strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+  },
+  {
     href: '/patient/profile',
     label: 'Profile',
     icon: (
@@ -82,28 +96,22 @@ const navItems = [
   },
 ];
 
-export default function PatientLayout({ children }) {
-  const pathname = usePathname();
-
-  async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
-  }
+function PatientSidebar({ children, pathname, pendingInvites, handleLogout }) {
+  const { user } = useAuth();
+  const fullName = user ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() : '';
+  const initials = user ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() : 'P';
 
   return (
-    <AuthProvider>
     <div className="app-layout">
-
-      {/* ── Sidebar ── */}
       <aside className="sidebar">
         <div className="sb-logo">
           <div className="logo">Safe<span>Dose</span></div>
         </div>
 
         <div className="sb-user">
-          <div className="sb-avatar">P</div>
+          <div className="sb-avatar">{initials}</div>
           <div>
-            <p className="sb-user-name">My Account</p>
+            <p className="sb-user-name">{fullName || 'My Account'}</p>
             <p className="sb-user-role">patient</p>
           </div>
         </div>
@@ -118,11 +126,21 @@ export default function PatientLayout({ children }) {
             >
               <span className="sb-icon">{item.icon}</span>
               {item.label}
+              {item.href === '/patient/caregivers' && pendingInvites > 0 && (
+                <span style={{ marginLeft: 'auto', background: '#f59e0b', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 6px', minWidth: 16, textAlign: 'center' }}>
+                  {pendingInvites}
+                </span>
+              )}
             </Link>
           ))}
         </nav>
 
         <div className="sb-bottom">
+          {user?.email && (
+            <p style={{ fontSize: 11, color: 'var(--gray400)', padding: '0 12px 8px', margin: 0, wordBreak: 'break-all' }}>
+              {user.email}
+            </p>
+          )}
           <button
             className="sb-link"
             style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer' }}
@@ -144,9 +162,32 @@ export default function PatientLayout({ children }) {
       <div className="app-content">
         {children}
       </div>
-
     </div>
-    <ChatFab />
+  );
+}
+
+export default function PatientLayout({ children }) {
+  const pathname = usePathname();
+  const [pendingInvites, setPendingInvites] = useState(0);
+
+  useEffect(() => {
+    fetch('/api/patient/caregiver-invites', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.invites) setPendingInvites(data.invites.length); })
+      .catch(() => {});
+  }, [pathname]);
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  }
+
+  return (
+    <AuthProvider>
+      <PatientSidebar pathname={pathname} pendingInvites={pendingInvites} handleLogout={handleLogout}>
+        {children}
+      </PatientSidebar>
+      <ChatFab />
     </AuthProvider>
   );
 }

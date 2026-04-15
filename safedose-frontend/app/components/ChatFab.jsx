@@ -4,12 +4,6 @@
 /**
  * SafeDose AI Chat Assistant
  *
- * Adapted from the school ChatFab — key differences:
- *   - No Firebase: JWT lives in httpOnly cookie, sent automatically by browser
- *   - Calls safedose-chat-service at NEXT_PUBLIC_CHAT_API_URL
- *   - Role-aware quick prompts: admin / caregiver / patient
- *   - SafeDose-specific greeting and messaging
- *
  * Window states:
  *   closed     → FAB button only
  *   normal     → standard panel (360px wide, ~580px tall)
@@ -35,9 +29,15 @@ const CHAT_MODES = [
     },
     {
         id: 'fda',
-        label: 'Drug Reference',
+        label: 'FDA',
         icon: '🔬',
         hint: 'Looks up official FDA drug data — may take a moment',
+    },
+    {
+        id: 'web',
+        label: 'Web',
+        icon: '🌐',
+        hint: 'Searches the web for up-to-date medication information',
     },
 ];
 
@@ -61,6 +61,15 @@ const GOOGLE_VOICES = [
   { id: 'AU', label: 'Australian Female', apiName: 'en-AU-Standard-A' },
 ];
 
+
+const GEMINI_VOICES = [
+  { id: 'Br', label: 'Browser' },
+  { id: 'Ao', label: 'Aoede' },
+  { id: 'Ch', label: 'Charon' },
+  { id: 'Fe', label: 'Fenrir' },
+  { id: 'Ko', label: 'Kore' },
+  { id: 'Pu', label: 'Puck' },
+];
 // ── Icons ─────────────────────────────────────────────────────────────────
 const MicIcon = () => (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
@@ -158,6 +167,9 @@ export default function ChatFab() {
     const firstName = user?.firstName || '';
     const role = user?.role || '';
 
+    // ── Session-storage key (per user so different accounts don't share history)
+    const storageKey = user?._id ? `safedose_chat_${user._id}` : null;
+
     // ── State ──────────────────────────────────────────────────────────────
     const [mode, setMode] = useState('mydata'); // 'mydata' | 'fda'
     const [isOpen, setIsOpen] = useState(false);
@@ -183,7 +195,29 @@ export default function ChatFab() {
     const audioRef = useRef(null);
     const currentSpeakIdRef = useRef(0);
 
-    // Update greeting once role is known
+    // Load persisted history once user is known
+    useEffect(() => {
+        if (!storageKey) return;
+        try {
+            const saved = sessionStorage.getItem(storageKey);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    setMessages(parsed);
+                    greetingUpdated.current = true; // greeting already in history
+                    return;
+                }
+            }
+        } catch { /* ignore parse errors */ }
+    }, [storageKey]);
+
+    // Persist messages to sessionStorage whenever they change
+    useEffect(() => {
+        if (!storageKey) return;
+        try { sessionStorage.setItem(storageKey, JSON.stringify(messages)); } catch { /* quota exceeded */ }
+    }, [messages, storageKey]);
+
+    // Update greeting once role is known (only if no saved history was loaded)
     useEffect(() => {
         if (role && !greetingUpdated.current) {
             greetingUpdated.current = true;

@@ -1,15 +1,85 @@
 // src/routes/caregiver.js
 
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import Assignment from '../models/Assignment.js';
-import Patient    from '../models/Patient.js';
-import User       from '../models/User.js';
-import Medication from '../models/Medication.js';
+import Assignment       from '../models/Assignment.js';
+import Patient          from '../models/Patient.js';
+import User             from '../models/User.js';
+import Medication       from '../models/Medication.js';
+import CaregiverRequest from '../models/CaregiverRequest.js';
 import { getCaregiverRosterAdherenceSummary, getPatientAdherenceSummary } from '../lib/adherence.js';
 import { searchOpenFDADrugs } from '../lib/openfda.js';
+import { sendEmail }    from '../lib/sendEmail.js';
 
 const router = Router();
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/caregiver/patient-invitation?token=xxx&action=accept|decline
+// No auth — token IS the auth.  Called when patient clicks the link in email.
+// ─────────────────────────────────────────────────────────────
+router.get('/patient-invitation', async (req, res) => {
+  const APP_URL = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
+  try {
+    const { token, action } = req.query;
+    if (!token || !['accept', 'decline'].includes(action)) {
+      return res.redirect(`${APP_URL}/patient/dashboard`);
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return res.redirect(`${APP_URL}/patient/dashboard`);
+    }
+
+    const { requestId, patientUserId } = payload;
+    const request = await CaregiverRequest.findOne({
+      _id: requestId,
+      patientUserId,
+      initiatedBy: 'caregiver',
+      status: 'pending',
+    });
+    if (!request) {
+      return res.redirect(`${APP_URL}/patient/dashboard`);
+    }
+
+    if (action === 'decline') {
+      request.status = 'declined';
+      await request.save();
+      return res.redirect(`${APP_URL}/patient/dashboard?invitation=declined`);
+    }
+
+    // Accept: find/create Patient record and create Assignment
+    request.status = 'accepted';
+    await request.save();
+
+    let patient = await Patient.findOne({ linkedUserId: patientUserId });
+    if (!patient) {
+      const patientUser = await User.findById(patientUserId);
+      if (patientUser) {
+        patient = await Patient.create({
+          linkedUserId: patientUserId,
+          firstName:    patientUser.firstName,
+          lastName:     patientUser.lastName,
+          email:        patientUser.email,
+        });
+      }
+    }
+
+    if (patient) {
+      const existing = await Assignment.findOne({ caregiverId: request.caregiverId, patientId: patient._id });
+      if (!existing) {
+        await Assignment.create({ caregiverId: request.caregiverId, patientId: patient._id, role: 'caregiver' });
+      }
+    }
+
+    return res.redirect(`${APP_URL}/patient/dashboard?invitation=accepted`);
+  } catch (err) {
+    console.error('[PATIENT INVITATION]', err);
+    return res.redirect(`${process.env.CLIENT_ORIGIN || 'http://localhost:3000'}/patient/dashboard`);
+  }
+});
 
 router.use(requireAuth, requireRole('caregiver'));
 
@@ -373,41 +443,56 @@ router.post('/patients', async (req, res) => {
   try {
     const { firstName, lastName, email, dateOfBirth, notes, mode, linkedEmail } = req.body;
 
-    // ── Link mode: connect an existing registered patient ──
+    // ── Link mode: invite an existing registered patient ──
     if (mode === 'link') {
       if (!linkedEmail) {
-        return res.status(400).json({ error: 'Email is required to link a patient.' });
+        return res.status(400).json({ error: 'Email is required to invite a patient.' });
       }
 
-      const existingUser = await User.findOne({ email: linkedEmail, role: 'patient' });
-      if (!existingUser) {
+      const patientUser = await User.findOne({ email: linkedEmail, role: 'patient' });
+      if (!patientUser) {
         return res.status(404).json({ error: 'No registered patient found with that email.' });
       }
 
-      // Find or create a Patient profile linked to that user account
-      let patient = await Patient.findOne({ linkedUserId: existingUser._id });
-      if (!patient) {
-        patient = await Patient.create({
-          linkedUserId: existingUser._id,
-          firstName:    existingUser.firstName,
-          lastName:     existingUser.lastName,
-          email:        existingUser.email,
+      // Block if already in roster
+      const existingPatient = await Patient.findOne({ linkedUserId: patientUser._id });
+      if (existingPatient) {
+        const alreadyAssigned = await Assignment.findOne({ caregiverId: req.user.userId, patientId: existingPatient._id });
+        if (alreadyAssigned) {
+          return res.status(409).json({ error: 'This patient is already in your roster.' });
+        }
+      }
+
+      // Upsert: reset to pending if an old accepted/declined request exists,
+      // or block if one is already pending
+      const existing = await CaregiverRequest.findOne({
+        patientUserId: patientUser._id,
+        caregiverId:   req.user.userId,
+        initiatedBy:   'caregiver',
+      });
+      if (existing?.status === 'pending') {
+        return res.status(409).json({ error: 'An invitation is already pending for this patient.' });
+      }
+
+      let request;
+      if (existing) {
+        // Re-invite after a previous accept/decline — reset to pending
+        existing.status = 'pending';
+        request = await existing.save();
+      } else {
+        request = await CaregiverRequest.create({
+          patientUserId: patientUser._id,
+          caregiverId:   req.user.userId,
+          initiatedBy:   'caregiver',
+          status:        'pending',
         });
       }
 
-      // Check for duplicate assignment
-      const existing = await Assignment.findOne({ caregiverId: req.user.userId, patientId: patient._id });
-      if (existing) {
-        return res.status(409).json({ error: 'This patient is already in your roster.' });
-      }
+      // Send invitation email to the patient
+      const caregiver = await User.findById(req.user.userId).select('firstName lastName').lean();
+      await sendCaregiverInviteEmail(request, patientUser, caregiver);
 
-      await Assignment.create({
-        caregiverId: req.user.userId,
-        patientId:   patient._id,
-        role:        'caregiver',
-      });
-
-      return res.status(201).json({ patient });
+      return res.status(201).json({ invited: true, email: patientUser.email });
     }
 
     // ── New mode: create a patient profile without an account ──
@@ -415,11 +500,20 @@ router.post('/patients', async (req, res) => {
       return res.status(400).json({ error: 'First and last name are required.' });
     }
 
+    const normalizedEmail = email?.trim().toLowerCase() || null;
+
+    if (normalizedEmail) {
+      const duplicate = await Patient.findOne({ email: normalizedEmail });
+      if (duplicate) {
+        return res.status(409).json({ error: 'A patient with this email already exists.' });
+      }
+    }
+
     const patient = await Patient.create({
       linkedUserId: null,
       firstName,
       lastName,
-      email:       email       || '',
+      email:       normalizedEmail,
       dateOfBirth: dateOfBirth || null,
       notes:       notes       || '',
     });
@@ -433,6 +527,12 @@ router.post('/patients', async (req, res) => {
     return res.status(201).json({ patient });
   } catch (err) {
     console.error('[POST PATIENT ERROR]', err);
+    if (err.code === 11000) {
+      if (err.keyPattern?.email) {
+        return res.status(409).json({ error: 'A patient with this email already exists.' });
+      }
+      return res.status(409).json({ error: 'An invitation is already pending for this patient.' });
+    }
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -531,12 +631,21 @@ router.delete('/patients/:id', async (req, res) => {
 
     if (assignment.role === 'owner') {
       // Delete the patient and all caregiver assignments for them
-      await Patient.findByIdAndDelete(req.params.id);
+      const patient = await Patient.findByIdAndDelete(req.params.id);
       await Medication.deleteMany({ patientId: req.params.id });
       await Assignment.deleteMany({ patientId: req.params.id });
+      // Clean up any invite requests so the caregiver can re-invite later
+      if (patient?.linkedUserId) {
+        await CaregiverRequest.deleteMany({ patientUserId: patient.linkedUserId, caregiverId: req.user.userId });
+      }
     } else {
       // Just remove this caregiver's link
       await Assignment.findByIdAndDelete(assignment._id);
+      // Clean up the invite request so the caregiver can re-invite later
+      const patient = await Patient.findById(req.params.id);
+      if (patient?.linkedUserId) {
+        await CaregiverRequest.deleteMany({ patientUserId: patient.linkedUserId, caregiverId: req.user.userId });
+      }
     }
 
     return res.json({ message: 'Patient removed.' });
@@ -561,5 +670,244 @@ router.get('/drugs', async (req, res) => {
     return res.status(502).json({ error: 'OpenFDA request failed.' });
   }
 });
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/caregiver/requests
+// Lists all pending hire requests sent to this caregiver.
+// ─────────────────────────────────────────────────────────────
+router.get('/requests', async (req, res) => {
+  try {
+    const requests = await CaregiverRequest.find({
+      caregiverId:  req.user.userId,
+      initiatedBy:  'patient',
+      status:       'pending',
+    })
+      .populate('patientUserId', 'firstName lastName email dateOfBirth')
+      .sort({ createdAt: -1 })
+      .lean();
+    return res.json({ requests });
+  } catch (err) {
+    console.error('[GET CAREGIVER REQUESTS]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PATCH /api/caregiver/requests/:id/accept
+// Caregiver accepts the request from their dashboard.
+// Creates a Patient record (if needed) and an Assignment.
+// ─────────────────────────────────────────────────────────────
+router.patch('/requests/:id/accept', async (req, res) => {
+  try {
+    const request = await CaregiverRequest.findOne({
+      _id: req.params.id,
+      caregiverId: req.user.userId,
+      status: 'pending',
+    });
+    if (!request) return res.status(404).json({ error: 'Request not found.' });
+
+    request.status = 'accepted';
+    await request.save();
+
+    let patient = await Patient.findOne({ linkedUserId: request.patientUserId });
+    if (!patient) {
+      const patientUser = await User.findById(request.patientUserId);
+      if (patientUser) {
+        patient = await Patient.create({
+          linkedUserId: request.patientUserId,
+          firstName:    patientUser.firstName,
+          lastName:     patientUser.lastName,
+          email:        patientUser.email,
+        });
+      }
+    }
+
+    if (patient) {
+      const existing = await Assignment.findOne({
+        caregiverId: req.user.userId,
+        patientId: patient._id,
+      });
+      if (!existing) {
+        await Assignment.create({
+          caregiverId: req.user.userId,
+          patientId: patient._id,
+          role: 'caregiver',
+        });
+      }
+    }
+
+    // Notify the patient their request was accepted
+    const patientUser   = await User.findById(request.patientUserId).select('email firstName').lean();
+    const caregiverUser = await User.findById(req.user.userId).select('firstName lastName').lean();
+    if (patientUser) {
+      const APP_URL = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
+      const cgName  = caregiverUser ? `${caregiverUser.firstName} ${caregiverUser.lastName}` : 'Your caregiver';
+      sendEmail(
+        patientUser.email,
+        `✅ SafeDose: ${cgName} accepted your request!`,
+        buildRequestAcceptedEmail(patientUser.firstName, cgName, APP_URL)
+      ).catch(() => {});
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[ACCEPT REQUEST]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PATCH /api/caregiver/requests/:id/decline
+// Caregiver declines the request from their dashboard.
+// ─────────────────────────────────────────────────────────────
+router.patch('/requests/:id/decline', async (req, res) => {
+  try {
+    const request = await CaregiverRequest.findOne({
+      _id: req.params.id,
+      caregiverId: req.user.userId,
+      status: 'pending',
+    });
+    if (!request) return res.status(404).json({ error: 'Request not found.' });
+
+    request.status = 'declined';
+    await request.save();
+
+    // Notify the patient their request was declined
+    const patientUser   = await User.findById(request.patientUserId).select('email firstName').lean();
+    const caregiverUser = await User.findById(req.user.userId).select('firstName lastName').lean();
+    if (patientUser) {
+      const APP_URL = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
+      const cgName  = caregiverUser ? `${caregiverUser.firstName} ${caregiverUser.lastName}` : 'The caregiver';
+      sendEmail(
+        patientUser.email,
+        `SafeDose: Update on your caregiver request`,
+        buildRequestDeclinedEmail(patientUser.firstName, cgName, APP_URL)
+      ).catch(() => {});
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[DECLINE REQUEST]', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ── Helper: send caregiver→patient invitation email ───────────
+async function sendCaregiverInviteEmail(request, patientUser, caregiver) {
+  const APP_URL = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
+  const token   = jwt.sign(
+    { requestId: request._id.toString(), patientUserId: patientUser._id.toString() },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  const acceptUrl  = `${APP_URL}/api/caregiver/patient-invitation?token=${token}&action=accept`;
+  const declineUrl = `${APP_URL}/api/caregiver/patient-invitation?token=${token}&action=decline`;
+  const cgName     = caregiver ? `${caregiver.firstName} ${caregiver.lastName}` : 'A caregiver';
+
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <tr><td style="background:#0d9488;padding:24px 32px;">
+        <p style="margin:0;color:#ffffff;font-size:22px;font-weight:bold;">💊 SafeDose</p>
+        <p style="margin:4px 0 0;color:#ccfbf1;font-size:13px;">Caregiver Invitation</p>
+      </td></tr>
+      <tr><td style="padding:32px;">
+        <p style="margin:0 0 8px;font-size:16px;color:#111827;font-weight:bold;">Hello ${patientUser.firstName},</p>
+        <p style="margin:0 0 16px;font-size:14px;color:#374151;">
+          <strong>${cgName}</strong> would like to become your caregiver on SafeDose.
+          If you accept, they will be able to view and manage your medications.
+        </p>
+        <table style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;width:100%;margin:16px 0;" cellpadding="14" cellspacing="0">
+          <tr><td>
+            <p style="margin:0;font-size:15px;font-weight:bold;color:#065f46;">👤 ${cgName}</p>
+            <p style="margin:6px 0 0;font-size:13px;color:#065f46;">Registered caregiver on SafeDose</p>
+          </td></tr>
+        </table>
+        <table cellpadding="0" cellspacing="0" style="margin:24px 0;">
+          <tr>
+            <td style="background:#0d9488;border-radius:8px;padding-right:12px;">
+              <a href="${acceptUrl}" style="display:inline-block;padding:14px 28px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;">✓ Accept</a>
+            </td>
+            <td style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;">
+              <a href="${declineUrl}" style="display:inline-block;padding:14px 28px;color:#374151;font-size:15px;font-weight:bold;text-decoration:none;">✕ Decline</a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:0;font-size:13px;color:#6b7280;">
+          This invitation expires in 7 days. You can also manage invitations from your
+          <a href="${APP_URL}/patient/dashboard" style="color:#0d9488;text-decoration:none;">patient dashboard</a>.
+        </p>
+      </td></tr>
+      <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;font-size:12px;color:#9ca3af;">SafeDose — Medication Safety Assistant. Do not reply to this email.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+
+  await sendEmail(
+    patientUser.email,
+    `💊 SafeDose: ${cgName} wants to be your caregiver`,
+    html
+  ).catch(() => {});
+}
+
+// ── Email template helpers ────────────────────────────────────
+
+function emailShell(headerSub, bodyHtml, appUrl) {
+  return `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <tr><td style="background:#0d9488;padding:24px 32px;">
+        <p style="margin:0;color:#ffffff;font-size:22px;font-weight:bold;">💊 SafeDose</p>
+        <p style="margin:4px 0 0;color:#ccfbf1;font-size:13px;">${headerSub}</p>
+      </td></tr>
+      <tr><td style="padding:32px;">${bodyHtml}</td></tr>
+      <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
+        <p style="margin:0;font-size:12px;color:#9ca3af;">SafeDose — Medication Safety Assistant &nbsp;|&nbsp; <a href="${appUrl}" style="color:#0d9488;text-decoration:none;">Open Dashboard</a></p>
+        <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">Do not reply to this email.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+}
+
+function buildRequestAcceptedEmail(patientFirstName, caregiverName, appUrl) {
+  const body = `
+    <p style="margin:0 0 8px;font-size:16px;color:#111827;font-weight:bold;">Great news, ${patientFirstName}!</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;"><strong>${caregiverName}</strong> has accepted your hire request and is now your caregiver on SafeDose.</p>
+    <table style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;width:100%;margin:0 0 24px;" cellpadding="14" cellspacing="0">
+      <tr><td>
+        <p style="margin:0;font-size:14px;color:#065f46;font-weight:bold;">✅ ${caregiverName} is now managing your care</p>
+        <p style="margin:6px 0 0;font-size:13px;color:#065f46;">They can now view your medications and track your adherence. You can find their contact details in your dashboard.</p>
+      </td></tr>
+    </table>
+    <a href="${appUrl}/patient/dashboard" style="display:inline-block;background:#0d9488;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:bold;text-decoration:none;">Go to my dashboard →</a>`;
+  return emailShell('Caregiver Request Accepted', body, `${appUrl}/patient/dashboard`);
+}
+
+function buildRequestDeclinedEmail(patientFirstName, caregiverName, appUrl) {
+  const body = `
+    <p style="margin:0 0 8px;font-size:16px;color:#111827;font-weight:bold;">Hello ${patientFirstName},</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;">Unfortunately, <strong>${caregiverName}</strong> has declined your caregiver hire request at this time.</p>
+    <table style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;width:100%;margin:0 0 20px;" cellpadding="14" cellspacing="0">
+      <tr><td>
+        <p style="margin:0;font-size:13px;color:#374151;">Don't worry — there are other caregivers available on SafeDose. Head to your dashboard to browse and send a request to another caregiver.</p>
+      </td></tr>
+    </table>
+    <a href="${appUrl}/patient/dashboard" style="display:inline-block;background:#0d9488;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:bold;text-decoration:none;">Find another caregiver →</a>`;
+  return emailShell('Caregiver Request Update', body, `${appUrl}/patient/dashboard`);
+}
 
 export default router;
