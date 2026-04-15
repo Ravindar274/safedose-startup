@@ -19,6 +19,84 @@ function hasUsableDrugName(drug) {
   return (brand && brand !== 'unknown') || !!generic;
 }
 
+function escapeRegex(text) {
+  return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function escapeOpenFDASearchValue(text) {
+  return String(text || '').replace(/"/g, '\\"').trim();
+}
+
+function getSeverityFromText(text) {
+  const normalized = normalizeDrugText(text);
+  if (!normalized) return 'Medium';
+
+  if (
+    normalized.includes('contraindicated') ||
+    normalized.includes('do not use') ||
+    normalized.includes('avoid concomitant') ||
+    normalized.includes('serious') ||
+    normalized.includes('severe')
+  ) {
+    return 'High';
+  }
+
+  if (
+    normalized.includes('monitor') ||
+    normalized.includes('caution') ||
+    normalized.includes('dose adjustment') ||
+    normalized.includes('may increase') ||
+    normalized.includes('may decrease')
+  ) {
+    return 'Medium';
+  }
+
+  return 'Low';
+}
+
+function getInteractionSnippet(text, term) {
+  const source = String(text || '').replace(/\s+/g, ' ').trim();
+  const token = String(term || '').toLowerCase();
+  if (!source) return '';
+
+  const idx = source.toLowerCase().indexOf(token);
+  if (idx < 0) return source.slice(0, 220);
+
+  const start = Math.max(0, idx - 80);
+  const end = Math.min(source.length, idx + token.length + 120);
+  return source.slice(start, end);
+}
+
+async function fetchDrugInteractionLabelBlocks(term, apiKey) {
+  const safeTerm = escapeOpenFDASearchValue(term);
+  if (!safeTerm) return [];
+
+  let url = 'https://api.fda.gov/drug/label.json?limit=10';
+  if (apiKey) url += `&api_key=${encodeURIComponent(apiKey)}`;
+
+  const searchVal = `(openfda.generic_name:"${safeTerm}" OR openfda.brand_name:"${safeTerm}")`;
+  url += `&search=${encodeURIComponent(searchVal)}`;
+
+  const response = await fetch(url);
+  if (response.status === 404) return [];
+  if (!response.ok) {
+    throw new Error(`OpenFDA interaction request failed with status ${response.status}`);
+  }
+
+  const data = await response.json();
+  const blocks = [];
+
+  (data.results || []).forEach((item) => {
+    const interactionSections = item.drug_interactions || [];
+    interactionSections.forEach((section) => {
+      const clean = cleanDrugText(section);
+      if (clean) blocks.push(clean);
+    });
+  });
+
+  return blocks;
+}
+
 export async function searchOpenFDADrugs(query = '', skip = 0, limit = 12) {
   const safeSkip = Math.max(0, Number.parseInt(skip, 10) || 0);
   const safeLimit = Math.min(30, Math.max(1, Number.parseInt(limit, 10) || 12));
@@ -98,4 +176,84 @@ export async function validateOpenFDADrugSelection(selectedDrug) {
     const idMatches = !expectedId || String(drug.id || '').trim() === expectedId;
     return brandMatches && genericMatches && idMatches;
   }) || null;
+}
+
+export async function findOpenFDAMedicationInteractions(medications = []) {
+  const apiKey = process.env.OPENFDA_API_KEY || '';
+  const meds = medications
+    .map((med) => {
+      const id = String(med?._id || med?.id || '').trim();
+      const name = cleanDrugText(med?.name || '');
+      const genericName = cleanDrugText(med?.genericName || '');
+      return { id, name, genericName };
+    })
+    .filter((med) => med.id && (med.name || med.genericName));
+
+  if (meds.length < 2) return [];
+
+  // Keep API volume bounded while still useful for typical regimens.
+  const cappedMeds = meds.slice(0, 10);
+
+  const interactionBlocksByMedId = new Map();
+  for (const med of cappedMeds) {
+    const primaryTerm = med.genericName || med.name;
+    const secondaryTerm = med.genericName && med.name && med.genericName !== med.name ? med.name : '';
+
+    const primaryBlocks = await fetchDrugInteractionLabelBlocks(primaryTerm, apiKey);
+    const secondaryBlocks = secondaryTerm
+      ? await fetchDrugInteractionLabelBlocks(secondaryTerm, apiKey)
+      : [];
+
+    interactionBlocksByMedId.set(med.id, [...primaryBlocks, ...secondaryBlocks]);
+  }
+
+  const found = new Map();
+
+  for (const source of cappedMeds) {
+    const blocks = interactionBlocksByMedId.get(source.id) || [];
+    if (!blocks.length) continue;
+
+    for (const target of cappedMeds) {
+      if (source.id === target.id) continue;
+
+      const terms = [target.genericName, target.name]
+        .map((t) => normalizeDrugText(t))
+        .filter((t) => t && t !== 'unknown' && t.length >= 3);
+
+      if (!terms.length) continue;
+
+      for (const block of blocks) {
+        const normalizedBlock = normalizeDrugText(block);
+        if (!normalizedBlock) continue;
+
+        const matchedTerm = terms.find((term) => {
+          const regex = new RegExp(`(^|[^a-z0-9])${escapeRegex(term)}([^a-z0-9]|$)`, 'i');
+          return regex.test(normalizedBlock);
+        });
+
+        if (!matchedTerm) continue;
+
+        const pairKey = [source.id, target.id].sort().join('|');
+        if (!found.has(pairKey)) {
+          found.set(pairKey, {
+            medicationA: {
+              id: source.id,
+              name: source.name || source.genericName,
+              genericName: source.genericName,
+            },
+            medicationB: {
+              id: target.id,
+              name: target.name || target.genericName,
+              genericName: target.genericName,
+            },
+            severity: getSeverityFromText(block),
+            source: 'OpenFDA label drug_interactions',
+            evidence: getInteractionSnippet(block, matchedTerm),
+          });
+        }
+      }
+    }
+  }
+
+  return [...found.values()];
 }
