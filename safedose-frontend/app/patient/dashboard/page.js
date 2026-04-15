@@ -2,7 +2,8 @@
 
 'use client';
 import '../patient-dashboard.css';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import NotificationBell from '../../components/NotificationBell';
 import Link from 'next/link';
 
@@ -223,11 +224,6 @@ function AddMedicationModal({ onClose, onSaved }) {
     e.preventDefault();
     setError('');
 
-    if (!form.selectedDrug || form.selectedDrug.brandName.toLowerCase() !== brandQuery.trim().toLowerCase()) {
-      setError('Select a medication from the brand name search results.');
-      return;
-    }
-
     setLoading(true);
     try {
       const res  = await fetch('/api/patient/medications', {
@@ -272,25 +268,26 @@ function AddMedicationModal({ onClose, onSaved }) {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="form-row-2">
-            <div className="form-grp" ref={lookupRef}>
-              <label>Brand name *</label>
-              <input
-                name="brandName"
-                placeholder="Search brand name, e.g. Tylenol"
-                value={brandQuery}
-                onChange={e => handleBrandInput(e.target.value)}
-                onFocus={() => setShowResults(true)}
-                autoComplete="off"
-                required
-              />
-              <p className="form-hint">Choose a medication from the FDA results below.</p>
-              {showResults && brandQuery.trim() && (
-                <div className="drug-lookup-results">
-                  {searchLoading ? (
-                    <div className="drug-lookup-row drug-lookup-row--muted">Searching FDA results…</div>
-                  ) : searchResults.length > 0 ? (
-                    searchResults.map(drug => (
+          <div className="form-grp form-grp--lookup" ref={lookupRef} style={{ gridColumn: '1 / -1' }}>
+            <label>Brand name *</label>
+            <input
+              name="brandName"
+              placeholder="Search brand name, e.g. Tylenol"
+              value={brandQuery}
+              onChange={e => handleBrandInput(e.target.value)}
+              onFocus={() => setShowResults(true)}
+              autoComplete="off"
+              required
+            />
+            {showResults && brandQuery.trim() && (
+              <div className="drug-lookup-results">
+                <div className="drug-lookup-header">Choose a medication from the FDA results below.</div>
+                {searchLoading ? (
+                  <div className="drug-lookup-row drug-lookup-row--muted">Searching FDA results…</div>
+                ) : searchResults.filter(drug => drug.brandName && drug.genericName).length > 0 ? (
+                  searchResults
+                    .filter(drug => drug.brandName && drug.genericName)
+                    .map(drug => (
                       <button
                         key={`${drug.id}-${drug.brandName}-${drug.genericName}`}
                         type="button"
@@ -299,24 +296,24 @@ function AddMedicationModal({ onClose, onSaved }) {
                       >
                         <span className="drug-lookup-title">{drug.brandName}</span>
                         <span className="drug-lookup-sub">
-                          {drug.genericName || 'Generic name unavailable'}
+                          {drug.genericName}
                         </span>
                       </button>
                     ))
-                  ) : (
-                    <div className="drug-lookup-row drug-lookup-row--muted">No FDA matches found.</div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="form-grp">
-              <label>Generic name *</label>
-              <input
-                value={form.selectedDrug?.genericName || ''}
-                placeholder="Selected automatically from FDA"
-                readOnly
-              />
-            </div>
+                ) : (
+                  <div className="drug-lookup-row drug-lookup-row--muted">No FDA matches found.</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="form-grp">
+            <label>Generic name *</label>
+            <input
+              value={form.selectedDrug?.genericName || ''}
+              placeholder="Selected automatically from FDA"
+              readOnly
+            />
           </div>
 
           <div className="form-row-2">
@@ -476,12 +473,343 @@ function MedRow({ med, onToggleTaken }) {
   );
 }
 
+// ── Caregiver Detail Panel ─────────────────────────────────────
+function CaregiverDetailPanel({ cg, status, onClose, onRequest, onCancel, onRemove, sending, cancelling, removing }) {
+  const profile = cg.caregiverProfile || {};
+
+  const Field = ({ label, value, full }) => value ? (
+    <div style={{ gridColumn: full ? '1 / -1' : undefined, marginBottom: 12 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gray400)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--gray800)', lineHeight: 1.45 }}>{value}</div>
+    </div>
+  ) : null;
+
+  const memberSince = cg.createdAt
+    ? new Date(cg.createdAt).toLocaleDateString('en-CA', { year: 'numeric', month: 'long' })
+    : null;
+
+  const SectionLabel = ({ children }) => (
+    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gray400)', textTransform: 'uppercase', letterSpacing: '0.06em', gridColumn: '1 / -1', marginBottom: 4, paddingBottom: 6, borderBottom: '1px solid var(--gray200)' }}>
+      {children}
+    </div>
+  );
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', overflowY: 'auto', padding: '20px 0' }}
+         onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', width: '100%', maxWidth: 520, padding: 28, position: 'relative', margin: 'auto' }}
+           onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 22 }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--teal-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: 'var(--teal)', flexShrink: 0 }}>
+            {cg.firstName?.[0]}{cg.lastName?.[0]}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 17, color: 'var(--gray900)', marginBottom: 2 }}>{cg.firstName} {cg.lastName}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 8px', marginTop: 4 }}>
+              {profile.qualification && (
+                <span style={{ fontSize: 11, fontWeight: 600, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 6 }}>
+                  {profile.qualification}
+                </span>
+              )}
+              {profile.specialization && (
+                <span style={{ fontSize: 11, fontWeight: 600, background: '#f0fdf4', color: '#166534', padding: '2px 8px', borderRadius: 6 }}>
+                  {profile.specialization}
+                </span>
+              )}
+              {profile.availability && (
+                <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--gray100)', color: 'var(--gray600)', padding: '2px 8px', borderRadius: 6 }}>
+                  {profile.availability}
+                </span>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray400)', padding: 4, flexShrink: 0 }}>
+            <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Professional details */}
+        <div style={{ background: 'var(--gray50)', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+            <SectionLabel>Professional</SectionLabel>
+            <Field label="Experience"   value={profile.experienceYears != null ? `${profile.experienceYears} year${profile.experienceYears !== 1 ? 's' : ''}` : null} />
+            <Field label="Specialization" value={profile.specialization} />
+            <Field label="Languages Spoken" value={profile.languagesSpoken} full />
+            <Field label="License ID"   value={profile.licenseId} />
+            <Field label="Availability" value={profile.availability} />
+          </div>
+        </div>
+
+        {/* Personal & contact */}
+        <div style={{ background: 'var(--gray50)', borderRadius: 10, padding: '14px 16px', marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+            <SectionLabel>Contact &amp; Info</SectionLabel>
+            <Field label="Email"        value={cg.email} full />
+            <Field label="Gender"       value={profile.gender} />
+            <Field label="Member since" value={memberSince} />
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          {status === 'accepted' ? (
+            <>
+              <span style={{ flex: 1, textAlign: 'center', padding: '10px', fontSize: 13, fontWeight: 600, color: '#0d9488', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
+                Your caregiver
+              </span>
+              <button
+                className="btn"
+                style={{ flex: 1, fontSize: 13, background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}
+                onClick={onRemove}
+                disabled={removing}
+              >
+                {removing ? 'Removing…' : 'Remove Caregiver'}
+              </button>
+            </>
+          ) : status === 'pending' ? (
+            <>
+              <span style={{ flex: 1, textAlign: 'center', padding: '10px', fontSize: 13, fontWeight: 600, color: '#92400e', background: '#fef3c7', borderRadius: 8, border: '1px solid #fde68a' }}>
+                Request pending
+              </span>
+              <button
+                className="btn"
+                style={{ flex: 1, fontSize: 13, background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}
+                onClick={onCancel}
+                disabled={cancelling}
+              >
+                {cancelling ? 'Cancelling…' : 'Cancel Request'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn" style={{ flex: 1, background: 'var(--gray100)', color: 'var(--gray700)', fontSize: 13 }} onClick={onClose}>
+                Close
+              </button>
+              <button
+                className="btn btn-teal"
+                style={{ flex: 1, fontSize: 13 }}
+                onClick={onRequest}
+                disabled={sending}
+              >
+                {sending ? 'Sending…' : status === 'declined' ? 'Re-request' : 'Send Request'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Find a Caregiver Modal ─────────────────────────────────────
+function FindCaregiverModal({ onClose }) {
+  const [caregivers,   setCaregivers]   = useState([]);
+  const [myRequests,   setMyRequests]   = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [sending,      setSending]      = useState(null);   // caregiverId being requested
+  const [cancelling,   setCancelling]   = useState(null);   // caregiverId being cancelled
+  const [removing,     setRemoving]     = useState(null);   // caregiverId being removed
+  const [error,        setError]        = useState('');
+  const [successMsg,   setSuccessMsg]   = useState('');
+  const [detailCg,     setDetailCg]     = useState(null);   // caregiver shown in detail panel
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [cgRes, reqRes] = await Promise.all([
+          fetch('/api/patient/caregivers'),
+          fetch('/api/patient/caregiver-requests'),
+        ]);
+        const cgData  = await cgRes.json();
+        const reqData = await reqRes.json();
+        setCaregivers(cgData.caregivers || []);
+        setMyRequests(reqData.requests  || []);
+      } catch {
+        setError('Failed to load caregivers.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  function getRequestStatus(caregiverId) {
+    const req = myRequests.find(r => (r.caregiverId?._id ?? r.caregiverId) === caregiverId);
+    return req ? req.status : null;
+  }
+
+  async function handleRequest(caregiverId) {
+    setSending(caregiverId);
+    setError('');
+    setSuccessMsg('');
+    try {
+      const res  = await fetch(`/api/patient/caregivers/${caregiverId}/request`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Failed to send request.'); return; }
+      setMyRequests(prev => {
+        const idx = prev.findIndex(r => (r.caregiverId?._id ?? r.caregiverId) === caregiverId);
+        const newReq = { ...data.request, caregiverId: { _id: caregiverId } };
+        return idx >= 0 ? prev.map((r, i) => i === idx ? newReq : r) : [newReq, ...prev];
+      });
+      setSuccessMsg('Request sent! The caregiver will receive an email invitation.');
+      setDetailCg(null);
+    } catch {
+      setError('Something went wrong.');
+    } finally {
+      setSending(null);
+    }
+  }
+
+  async function handleCancel(caregiverId) {
+    setCancelling(caregiverId);
+    setError('');
+    try {
+      const res = await fetch(`/api/patient/caregivers/${caregiverId}/request`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json(); setError(d.error || 'Failed to cancel.'); return; }
+      setMyRequests(prev => prev.filter(r => (r.caregiverId?._id ?? r.caregiverId) !== caregiverId));
+      setSuccessMsg('Request cancelled.');
+      setDetailCg(null);
+    } catch {
+      setError('Something went wrong.');
+    } finally {
+      setCancelling(null);
+    }
+  }
+
+  async function handleRemove(caregiverId) {
+    setRemoving(caregiverId);
+    setError('');
+    try {
+      const res = await fetch(`/api/patient/caregivers/${caregiverId}`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json(); setError(d.error || 'Failed to remove caregiver.'); return; }
+      setMyRequests(prev => prev.filter(r => (r.caregiverId?._id ?? r.caregiverId) !== caregiverId));
+      setSuccessMsg('Caregiver removed successfully.');
+      setDetailCg(null);
+    } catch {
+      setError('Something went wrong.');
+    } finally {
+      setRemoving(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 660 }}>
+          <div className="modal-header">
+            <div>
+              <h3 className="modal-title">Find a Caregiver</h3>
+              <p className="modal-sub">Browse available caregivers. Click a card to view details and send a request.</p>
+            </div>
+            <button className="modal-close" onClick={onClose} type="button">
+              <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+                   strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+
+          {error      && <p className="form-error" style={{ marginBottom: 12 }}>{error}</p>}
+          {successMsg && <p style={{ fontSize: 13, color: '#0d9488', marginBottom: 12, padding: '10px 14px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>{successMsg}</p>}
+
+          {loading ? (
+            <p style={{ fontSize: 13, color: 'var(--gray400)', padding: '20px 0' }}>Loading caregivers…</p>
+          ) : caregivers.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--gray400)', padding: '20px 0' }}>No approved caregivers available right now.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 440, overflowY: 'auto' }}>
+              {caregivers.map(cg => {
+                const status  = getRequestStatus(cg._id);
+                const profile = cg.caregiverProfile || {};
+                return (
+                  <div
+                    key={cg._id}
+                    onClick={() => setDetailCg(cg)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: 'var(--gray50)', borderRadius: 10, border: '1px solid var(--gray200)', cursor: 'pointer', transition: 'border-color 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--teal)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--gray200)'}
+                  >
+                    {/* Avatar */}
+                    <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'var(--teal-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: 'var(--teal)', flexShrink: 0 }}>
+                      {cg.firstName?.[0]}{cg.lastName?.[0]}
+                    </div>
+
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--gray900)' }}>
+                        {cg.firstName} {cg.lastName}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--gray500)', marginTop: 2, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
+                        {profile.specialization && <span>{profile.specialization}</span>}
+                        {profile.experienceYears != null && <span>{profile.experienceYears} yrs exp.</span>}
+                        {profile.qualification   && <span>{profile.qualification}</span>}
+                        {profile.availability    && <span>{profile.availability}</span>}
+                      </div>
+                    </div>
+
+                    {/* Status badge */}
+                    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {status === 'accepted' ? (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#0d9488', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, padding: '3px 8px' }}>Your caregiver</span>
+                      ) : status === 'pending' ? (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '3px 8px' }}>Request sent</span>
+                      ) : status === 'declined' ? (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', background: 'var(--gray100)', border: '1px solid var(--gray200)', borderRadius: 6, padding: '3px 8px' }}>Declined</span>
+                      ) : null}
+                      <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+                           strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ color: 'var(--gray400)' }}>
+                        <polyline points="9 18 15 12 9 6"/>
+                      </svg>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Detail panel */}
+      {detailCg && (
+        <CaregiverDetailPanel
+          cg={detailCg}
+          status={getRequestStatus(detailCg._id)}
+          onClose={() => setDetailCg(null)}
+          onRequest={() => handleRequest(detailCg._id)}
+          onCancel={() => handleCancel(detailCg._id)}
+          onRemove={() => handleRemove(detailCg._id)}
+          sending={sending === detailCg._id}
+          cancelling={cancelling === detailCg._id}
+          removing={removing === detailCg._id}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────
 export default function PatientDashboard() {
-  const [medications, setMedications] = useState([]);
+  return <Suspense><PatientDashboardInner /></Suspense>;
+}
+
+function PatientDashboardInner() {
+  const [medications,    setMedications]    = useState([]);
   const [allMedications, setAllMedications] = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [showModal,   setShowModal]   = useState(false);
+  const [loading,        setLoading]        = useState(true);
+  const [showModal,      setShowModal]      = useState(false);
+  const [banner,         setBanner]         = useState('');
+  const searchParams = useSearchParams();
+
+  // Show banner when redirected back after accepting/declining a caregiver invitation
+  useEffect(() => {
+    const inv = searchParams.get('invitation');
+    if (inv === 'accepted') setBanner('You accepted the caregiver invitation. They can now manage your medications.');
+    if (inv === 'declined') setBanner('You declined the caregiver invitation.');
+  }, [searchParams]);
 
   const fetchToday = useCallback(async () => {
     setLoading(true);
@@ -587,6 +915,14 @@ export default function PatientDashboard() {
       </div>
 
       <main className="app-main">
+
+        {/* ── Invitation banner (from caregiver email invite) ── */}
+        {banner && (
+          <div style={{ padding: '12px 16px', marginBottom: 16, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ fontSize: 13, color: '#065f46' }}>{banner}</span>
+            <button onClick={() => setBanner('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 16 }}>✕</button>
+          </div>
+        )}
 
         {/* ── Stat cards ── */}
         <div className="stat-grid">
@@ -728,6 +1064,7 @@ export default function PatientDashboard() {
           </p>
         </div>
 
+
       </main>
 
       {showModal && (
@@ -736,6 +1073,7 @@ export default function PatientDashboard() {
           onSaved={onMedSaved}
         />
       )}
+
     </>
   );
 }

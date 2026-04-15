@@ -41,7 +41,8 @@ const MedicationSchema = new mongoose.Schema(
       default: 'active',
     },
     rxcui:      { type: String, default: '' },
-    takenDoses: { type: String, default: null },
+    takenDoses:  { type: String, default: null },
+    emailsSent:  { type: String, default: null }, // "YYYY-MM-DD:doseIdx=bits" bits: 1=email1, 2=email2, 3=both
     startDate:  { type: Date, default: Date.now },
     endDate:    { type: Date, default: null },
     isOngoing:  { type: Boolean, default: true },

@@ -40,7 +40,14 @@
   pointer-events: none;
   z-index: 999;
   white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+
+.chat-fab:hover ~ .chat-fab-tooltip {
   opacity: 0.9;
+  visibility: visible;
 }
 
 /* ── Chat window ─────────────────────────────────────────────────────────── */
@@ -305,6 +312,13 @@
 .chat-mode-btn--fda.chat-mode-btn--active {
   background: var(--teal);
   border-color: var(--teal);
+  color: #fff;
+}
+
+/* Web Search — active: indigo */
+.chat-mode-btn--web.chat-mode-btn--active {
+  background: #4f46e5;
+  border-color: #4f46e5;
   color: #fff;
 }
 

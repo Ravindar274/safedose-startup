@@ -2,7 +2,8 @@
 
 'use client';
 import '../caregiver-dashboard.css';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import NotificationBell from '../../components/NotificationBell';
 
 // ── Helpers ──────────────────────────────────────────────
@@ -18,9 +19,10 @@ function statusOf(patient) {
 
 // ── Add Patient Modal ─────────────────────────────────────
 function AddPatientModal({ onClose, onSaved }) {
-  const [mode, setMode]       = useState('new'); // 'new' | 'link'
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState('');
+  const [mode, setMode]         = useState('new'); // 'new' | 'link'
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
+  const [invitedEmail, setInvitedEmail] = useState(''); // set after invite sent
 
   // New patient fields
   const [form, setForm] = useState({
@@ -50,13 +52,46 @@ function AddPatientModal({ onClose, onSaved }) {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to add patient.'); return; }
-      onSaved(data.patient);
-      onClose();
+
+      if (data.invited) {
+        // Invitation sent — show confirmation, don't add to roster yet
+        setInvitedEmail(data.email);
+      } else {
+        onSaved(data.patient);
+        onClose();
+      }
     } catch {
       setError('Something went wrong.');
     } finally {
       setLoading(false);
     }
+  }
+
+  // ── Invitation sent confirmation ──
+  if (invitedEmail) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-box" onClick={e => e.stopPropagation()} style={{ textAlign: 'center', padding: '40px 32px' }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <svg stroke="#059669" fill="none" strokeWidth="2.5" viewBox="0 0 24 24"
+                 strokeLinecap="round" strokeLinejoin="round" width="26" height="26">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <h3 style={{ margin: '0 0 8px', fontSize: 17, color: 'var(--gray900)', fontWeight: 700 }}>Invitation sent!</h3>
+          <p style={{ margin: '0 0 6px', fontSize: 14, color: 'var(--gray600)' }}>
+            An email has been sent to
+          </p>
+          <p style={{ margin: '0 0 24px', fontSize: 14, fontWeight: 600, color: 'var(--gray800)' }}>
+            {invitedEmail}
+          </p>
+          <p style={{ margin: '0 0 28px', fontSize: 13, color: 'var(--gray500)' }}>
+            The patient will be added to your roster once they accept the invitation from their email.
+          </p>
+          <button className="btn btn-teal" style={{ minWidth: 120 }} onClick={onClose}>Done</button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -67,7 +102,7 @@ function AddPatientModal({ onClose, onSaved }) {
         <div className="modal-header">
           <div>
             <h3 className="modal-title">Add patient</h3>
-            <p className="modal-sub">Create a profile for someone without an account, or link an existing registered patient.</p>
+            <p className="modal-sub">Create a profile for someone without an account, or invite an existing registered patient.</p>
           </div>
           <button className="modal-close" onClick={onClose}>
             <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
@@ -81,14 +116,14 @@ function AddPatientModal({ onClose, onSaved }) {
         <div className="modal-tabs">
           <button
             className={`modal-tab${mode === 'new' ? ' active' : ''}`}
-            onClick={() => setMode('new')}
+            onClick={() => { setMode('new'); setError(''); }}
             type="button"
           >New patient</button>
           <button
             className={`modal-tab${mode === 'link' ? ' active' : ''}`}
-            onClick={() => setMode('link')}
+            onClick={() => { setMode('link'); setError(''); }}
             type="button"
-          >Link registered patient</button>
+          >Invite registered patient</button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -123,7 +158,7 @@ function AddPatientModal({ onClose, onSaved }) {
               <input type="email" placeholder="patient@example.com" value={linkedEmail}
                      onChange={e => setLinkedEmail(e.target.value)} required />
               <p style={{ fontSize: 12, color: 'var(--gray400)', marginTop: 6 }}>
-                The patient must already have a SafeDose account with role &quot;patient&quot;.
+                The patient must have a SafeDose account. They will receive an email to accept or decline.
               </p>
             </div>
           )}
@@ -131,7 +166,9 @@ function AddPatientModal({ onClose, onSaved }) {
           {error && <p className="form-error">{error}</p>}
 
           <button type="submit" className="btn btn-teal btn-full" disabled={loading}>
-            {loading ? 'Saving…' : mode === 'link' ? 'Link patient' : 'Create patient'}
+            {loading
+              ? (mode === 'link' ? 'Sending invite…' : 'Saving…')
+              : (mode === 'link' ? 'Send Invitation' : 'Create patient')}
           </button>
         </form>
       </div>
@@ -141,9 +178,17 @@ function AddPatientModal({ onClose, onSaved }) {
 
 // ── Main Page ─────────────────────────────────────────────
 export default function CaregiverDashboard() {
-  const [patients, setPatients] = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  return <Suspense><CaregiverDashboardInner /></Suspense>;
+}
+
+function CaregiverDashboardInner() {
+  const [patients,      setPatients]      = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [showModal,     setShowModal]     = useState(false);
+  const [banner,        setBanner]        = useState('');
+  const [removeTarget,  setRemoveTarget]  = useState(null); // patient to confirm removal
+  const [removing,      setRemoving]      = useState(false);
+  const searchParams = useSearchParams();
 
   const fetchPatients = useCallback(async () => {
     setLoading(true);
@@ -158,12 +203,27 @@ export default function CaregiverDashboard() {
     }
   }, []);
 
-  useEffect(() => { fetchPatients(); }, [fetchPatients]);
+  useEffect(() => {
+    fetchPatients();
+  }, [fetchPatients]);
 
-  async function deletePatient(id) {
-    if (!confirm('Remove this patient from your roster?')) return;
-    await fetch(`/api/caregiver/patients/${id}`, { method: 'DELETE' });
-    setPatients(prev => prev.filter(p => p._id !== id));
+  // Show banner when redirected back from email token link
+  useEffect(() => {
+    const inv = searchParams.get('invitation');
+    if (inv === 'accepted') setBanner('You accepted the patient invitation. They have been added to your roster.');
+    if (inv === 'declined') setBanner('You declined the patient invitation.');
+  }, [searchParams]);
+
+  async function confirmDeletePatient() {
+    if (!removeTarget) return;
+    setRemoving(true);
+    try {
+      await fetch(`/api/caregiver/patients/${removeTarget._id}`, { method: 'DELETE' });
+      setPatients(prev => prev.filter(p => p._id !== removeTarget._id));
+    } finally {
+      setRemoving(false);
+      setRemoveTarget(null);
+    }
   }
 
   function onPatientSaved(newPatient) {
@@ -260,6 +320,14 @@ export default function CaregiverDashboard() {
           </div>
         </div>
 
+        {/* ── Invitation banner (from email token redirect) ── */}
+        {banner && (
+          <div style={{ padding: '12px 16px', marginBottom: 16, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ fontSize: 13, color: '#065f46' }}>{banner}</span>
+            <button onClick={() => setBanner('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 16 }}>✕</button>
+          </div>
+        )}
+
         {/* ── Patient roster ── */}
         <div className="card-box">
           <div className="section-hdr">
@@ -284,7 +352,7 @@ export default function CaregiverDashboard() {
                 <>
                   <p className="roster-section-lbl">Missed Doses</p>
                   {missedPatients.map(p => (
-                    <PatientRow key={p._id} patient={p} onDelete={deletePatient} />
+                    <PatientRow key={p._id} patient={p} onDelete={p => setRemoveTarget(p)} />
                   ))}
                 </>
               )}
@@ -294,7 +362,7 @@ export default function CaregiverDashboard() {
                 <>
                   <p className="roster-section-lbl">On Track</p>
                   {onTrackPatients.map(p => (
-                    <PatientRow key={p._id} patient={p} onDelete={deletePatient} />
+                    <PatientRow key={p._id} patient={p} onDelete={p => setRemoveTarget(p)} />
                   ))}
                 </>
               )}
@@ -303,7 +371,49 @@ export default function CaregiverDashboard() {
         </div>
       </main>
 
-      {/* ── Modal ── */}
+      {/* ── Remove patient confirmation modal ── */}
+      {removeTarget && (
+        <div className="modal-overlay" onClick={() => setRemoveTarget(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Remove patient?</h3>
+              <button className="modal-close" onClick={() => setRemoveTarget(null)} type="button">
+                <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
+                     strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--gray600)', margin: '16px 0 8px' }}>
+              Remove <strong>{removeTarget.firstName} {removeTarget.lastName}</strong> from your roster?
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--gray400)', margin: '0 0 24px' }}>
+              {removeTarget.assignmentRole === 'owner'
+                ? 'This will permanently delete the patient record and all their medication data.'
+                : 'This will only remove them from your roster. Their account and data will remain.'}
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                className="btn"
+                style={{ flex: 1, background: 'var(--gray100)', color: 'var(--gray800)' }}
+                onClick={() => setRemoveTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn"
+                style={{ flex: 1, background: 'var(--danger)', color: '#fff' }}
+                onClick={confirmDeletePatient}
+                disabled={removing}
+              >
+                {removing ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add patient modal ── */}
       {showModal && (
         <AddPatientModal
           onClose={() => setShowModal(false)}
@@ -347,7 +457,7 @@ function PatientRow({ patient, onDelete }) {
         }`}>
           {status === 'warning' ? 'Missed doses' : status === 'no-meds' ? 'Not scheduled' : 'On track'}
         </span>
-        <button className="icon-btn icon-btn-del" onClick={(e) => { e.stopPropagation(); onDelete(patient._id); }} title="Remove patient">
+        <button className="icon-btn icon-btn-del" onClick={(e) => { e.stopPropagation(); onDelete(patient); }} title="Remove patient">
           <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
                strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
             <polyline points="3 6 5 6 21 6"/>

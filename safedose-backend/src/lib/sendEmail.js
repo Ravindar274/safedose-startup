@@ -1,24 +1,30 @@
 // src/lib/sendEmail.js
 //
-// Sends email via a Google Apps Script web app.
-// Set APPS_SCRIPT_URL in your .env to the deployed Apps Script URL.
+// Sends email via SendGrid.
+// Set SENDGRID_API_KEY and SENDGRID_FROM_EMAIL in your .env.
+
+import sgMail from '@sendgrid/mail';
 
 export async function sendEmail(to, subject, htmlBody) {
-  const url = process.env.APPS_SCRIPT_URL;
-  if (!url) {
-    console.warn('[Email] APPS_SCRIPT_URL not set — skipping email to', to);
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const from   = process.env.SENDGRID_FROM_EMAIL;
+
+  if (!apiKey) {
+    console.warn('[Email] SENDGRID_API_KEY not set — skipping email to', to);
     return;
   }
+  if (!from) {
+    console.warn('[Email] SENDGRID_FROM_EMAIL not set — skipping email to', to);
+    return;
+  }
+
+  sgMail.setApiKey(apiKey);
+
   try {
-    const res = await fetch(url, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ to, subject, body: htmlBody }),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    await sgMail.send({ to, from: { email: from, name: 'SafeDose' }, subject, html: htmlBody });
     console.log(`[Email] Sent to ${to}: "${subject}"`);
   } catch (err) {
-    console.error(`[Email] Failed to send to ${to}:`, err.message);
+    const detail = err.response?.body?.errors?.[0]?.message ?? err.message;
+    console.error(`[Email] Failed to send to ${to}:`, detail);
   }
 }

@@ -4,7 +4,7 @@ import express from 'express';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import { fetchMongoContext } from '../lib/mongoContext.js';
 import { fetchFDAContext } from '../lib/fdaContext.js';
-import { callGemini, extractDrugNames } from '../lib/gemini.js';
+import { callGemini, callGeminiWithSearch, extractDrugNames } from '../lib/gemini.js';
 import { Medication, Patient, Assignment } from '../lib/models.js';
 
 const router = express.Router();
@@ -59,6 +59,13 @@ router.post('/', requireAuth, async (req, res) => {
     const user  = req.user;
     const today = new Date().toLocaleDateString('en-CA');
 
+    // Web search mode — skip DB context, let Gemini search the web directly
+    if (mode === 'web') {
+      console.log('[Web mode] Using Gemini Google Search grounding');
+      const reply = await callGeminiWithSearch(message);
+      return res.json({ reply });
+    }
+
     // Step 1 — get DB medication names (always needed for MongoDB context)
     const medNames = await getMedicationNames(user);
 
@@ -110,11 +117,11 @@ Their role: ${ROLE_LABELS[user.role] || user.role}
 
 STRICT RULES:
 - Answer ONLY using the data provided below. Never invent drug names, dosages, or medical advice.
-- Always recommend consulting a doctor or pharmacist for medical decisions.
+- Always recommend consulting a doctor or pharmacist for medical decisions unless the question not relavent to medication safety.
 - Never reveal one patient's data to another user.
 - For simple questions give a concise 2-5 sentence response.
 - For list requests, provide complete information — never truncate.
-- If the answer is not in the data provided, say: "I don't have that information in your records. Please consult your healthcare provider."
+- If the answer is not in the data provided, say: "I don't have that information. Please consult your healthcare provider."
 - Do not use markdown bold (**) or symbols. Use plain numbered lists.
 - When referencing FDA data, always mention it is from the FDA drug label.
 

@@ -10,6 +10,10 @@ const nextConfig = {
         source:      '/api/:path*',
         destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/:path*`,
       },
+      {
+        source:      '/chatservice/:path*',
+        destination: `${process.env.CHAT_PROXY_URL || 'http://localhost:5002'}/chatservice/:path*`,
+      },
     ];
   },
 
@@ -22,7 +26,7 @@ const nextConfig = {
         headers: [
           {
             key:   'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:;",
+            value: `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss: ${process.env.NEXT_PUBLIC_CHAT_API_URL || 'http://localhost:5002'};`,
           },
         ],
       },

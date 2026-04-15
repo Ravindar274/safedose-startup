@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: safedose-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: node-app
+        # Note the :v2 at the end of the image path
+        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-backend-image:v6
+        ports:
+        - containerPort: 8080
+        # Add your .env properties here
+        env:
+        - name: PORT
+          value: "8080"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: MONGODB_URI
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: JWT_SECRET
+        - name: CLIENT_ORIGIN
+          value: "https://www.safe-dose.org"
+        - name: SENDGRID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: SENDGRID_API_KEY
+        - name: SENDGRID_FROM_EMAIL
+          value: "noreply@safe-dose.org"
+        - name: VAPID_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: VAPID_PUBLIC_KEY
+        - name: VAPID_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: safedose-secrets
+              key: VAPID_PRIVATE_KEY
+        - name: VAPID_MAILTO
+          value: "admin@safedose.com"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  type: ClusterIP 
+  selector:
+    app: backend
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080

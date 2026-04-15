@@ -1,0 +1,34 @@
+kind: HTTPRoute
+apiVersion: gateway.networking.k8s.io/v1
+metadata:
+  name: safedose-routing
+spec:
+  parentRefs:
+  - name: safedose-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /backendservice
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /  # Using the specific 'replacePrefixMatch' field
+    backendRefs:
+    - name: backend-service
+      port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /chatservice
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /
+    backendRefs:
+    - name: chat-service
+      port: 80
