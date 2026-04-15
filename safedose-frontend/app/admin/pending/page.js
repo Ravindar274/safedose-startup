@@ -3,15 +3,17 @@
 'use client';
 import '../admin.css';
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 function initials(first, last) {
   return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase();
 }
 
 export default function AdminPendingPage() {
+  const searchParams = useSearchParams();
   const [caregivers, setCaregivers] = useState([]);
   const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState('');
+  const [search,     setSearch]     = useState(searchParams.get('search') || '');
   const [acting,     setActing]     = useState(null); // id being approved/rejected
 
   useEffect(() => {
