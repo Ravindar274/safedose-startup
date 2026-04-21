@@ -37,28 +37,54 @@ export default function PatientSafetyCenterPage() {
   const [openFdaInteractions, setOpenFdaInteractions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [fdaWarning, setFdaWarning] = useState('');
+
+  async function fetchJsonSafe(url) {
+    const res = await fetch(url);
+    const contentType = res.headers.get('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      return { ok: res.ok, status: res.status, data };
+    }
+
+    const text = await res.text();
+    return {
+      ok: res.ok,
+      status: res.status,
+      data: null,
+      text,
+    };
+  }
 
   useEffect(() => {
     async function loadSafetyData() {
       setLoading(true);
       setError('');
+      setFdaWarning('');
       try {
-        const [allRes, todayRes, fdaRes] = await Promise.all([
-          fetch('/api/patient/medications'),
-          fetch('/api/patient/medications/today'),
-          fetch('/api/patient/interactions/openfda'),
+        const [allResult, todayResult, fdaResult] = await Promise.all([
+          fetchJsonSafe('/api/patient/medications'),
+          fetchJsonSafe('/api/patient/medications/today'),
+          fetchJsonSafe('/api/patient/interactions/openfda'),
         ]);
 
-        const [allJson, todayJson, fdaJson] = await Promise.all([allRes.json(), todayRes.json(), fdaRes.json()]);
-
-        if (!allRes.ok || !todayRes.ok || !fdaRes.ok) {
-          setError(allJson.error || todayJson.error || fdaJson.error || 'Failed to load safety data.');
+        if (!allResult.ok || !todayResult.ok || !allResult.data || !todayResult.data) {
+          const allErr = allResult.data?.error;
+          const todayErr = todayResult.data?.error;
+          setError(allErr || todayErr || 'Failed to load safety data.');
           return;
         }
 
-        setAllMeds(allJson.medications || []);
-        setTodayMeds(todayJson.medications || []);
-        setOpenFdaInteractions(fdaJson.interactions || []);
+        setAllMeds(allResult.data.medications || []);
+        setTodayMeds(todayResult.data.medications || []);
+
+        if (fdaResult.ok && fdaResult.data) {
+          setOpenFdaInteractions(fdaResult.data.interactions || []);
+        } else {
+          setOpenFdaInteractions([]);
+          setFdaWarning('OpenFDA interaction data is temporarily unavailable. Showing local safety checks only.');
+        }
       } catch {
         setError('Could not load safety data.');
       } finally {
@@ -234,6 +260,10 @@ export default function PatientSafetyCenterPage() {
           <div className="section-hdr">
             <h3>Safety Review</h3>
           </div>
+
+          {!loading && !error && fdaWarning ? (
+            <p className="safety-muted">{fdaWarning}</p>
+          ) : null}
 
           {loading ? (
             <p className="safety-muted">Loading safety checks...</p>
