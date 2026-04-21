@@ -1,0 +1,963 @@
+{
+  "info": {
+    "name": "SafeDose API",
+    "description": "Comprehensive API documentation for SafeDose medication management system",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "User registration and login endpoints",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass123\",\n  \"confirmPassword\": \"SecurePass123\",\n  \"dateOfBirth\": \"1990-01-15\",\n  \"gender\": \"Male\",\n  \"role\": \"patient\",\n  \"qualification\": \"RN\",\n  \"experienceYears\": 5,\n  \"specialization\": \"Geriatric Care\",\n  \"availability\": \"Full-time\",\n  \"licenseId\": \"LIC123456\",\n  \"languagesSpoken\": [\"English\", \"Spanish\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user account. Role can be 'admin', 'patient', or 'caregiver'. Additional fields required for caregivers."
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login with email and password. Returns authentication token."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Logout current user session"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Profile",
+      "description": "User profile management endpoints",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/user/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "profile"]
+            },
+            "description": "Get current user's profile information"
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Smith\",\n  \"email\": \"john.smith@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "profile"]
+            },
+            "description": "Update user profile information"
+          }
+        },
+        {
+          "name": "Update Notifications",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": true,\n  \"desktop\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/notifications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "notifications"]
+            },
+            "description": "Update user notification preferences"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Patient",
+      "description": "Patient-specific endpoints",
+      "item": [
+        {
+          "name": "Search Drugs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/patient/drugs?q=aspirin&skip=0&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "drugs"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "aspirin",
+                  "description": "Search query for drug name"
+                },
+                {
+                  "key": "skip",
+                  "value": "0",
+                  "description": "Number of results to skip (pagination)"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of results to return"
+                }
+              ]
+            },
+            "description": "Search OpenFDA for drugs by brand or generic name"
+          }
+        },
+        {
+          "name": "Get Adherence",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/patient/adherence?days=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "adherence"],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30",
+                  "description": "Number of days to retrieve adherence data for"
+                }
+              ]
+            },
+            "description": "Get historical adherence trends for current patient"
+          }
+        },
+        {
+          "name": "Get Today's Medications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/patient/medications/today",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "medications", "today"]
+            },
+            "description": "Get all medications active for today with dose tracking"
+          }
+        },
+        {
+          "name": "Get All Medications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/patient/medications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "medications"]
+            },
+            "description": "Get all medications for the current patient"
+          }
+        },
+        {
+          "name": "Add Medication",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"selectedDrug\": {\n    \"brandName\": \"Aspirin\",\n    \"genericName\": \"Acetylsalicylic Acid\",\n    \"rxcui\": \"1191\"\n  },\n  \"dosage\": \"500mg\",\n  \"frequency\": \"twice daily\",\n  \"scheduleTimes\": [\"08:00 AM\", \"08:00 PM\"],\n  \"isOngoing\": true,\n  \"startDate\": \"2024-04-09\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/patient/medications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "medications"]
+            },
+            "description": "Add a new medication for the current patient"
+          }
+        },
+        {
+          "name": "Mark Dose Taken",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doseIndex\": 0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/patient/medications/{{medication_id}}/taken",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "medications", "{{medication_id}}", "taken"]
+            },
+            "description": "Toggle a specific dose as taken/untaken for today"
+          }
+        },
+        {
+          "name": "Update Medication",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dosage\": \"500mg\",\n  \"frequency\": \"once daily\",\n  \"scheduleTimes\": [\"09:00 AM\"],\n  \"isOngoing\": true,\n  \"startDate\": \"2024-04-09\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/patient/medications/{{medication_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "medications", "{{medication_id}}"]
+            },
+            "description": "Update medication details"
+          }
+        },
+        {
+          "name": "Stop Medication",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/patient/medications/{{medication_id}}/stop",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "medications", "{{medication_id}}", "stop"]
+            },
+            "description": "Discontinue a medication"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Caregiver",
+      "description": "Caregiver-specific endpoints for managing patients",
+      "item": [
+        {
+          "name": "Get All Patients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients"]
+            },
+            "description": "Get all patients assigned to this caregiver with live stats"
+          }
+        },
+        {
+          "name": "Get Patient",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}"]
+            },
+            "description": "Get specific patient details"
+          }
+        },
+        {
+          "name": "Create Patient",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\",\n  \"email\": \"jane.smith@example.com\",\n  \"dateOfBirth\": \"1965-05-20\",\n  \"notes\": \"Please call before visiting\",\n  \"mode\": \"new\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients"]
+            },
+            "description": "Create a new patient profile or link an existing registered patient"
+          }
+        },
+        {
+          "name": "Link Patient",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"link\",\n  \"linkedEmail\": \"patient@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients"]
+            },
+            "description": "Link an existing registered patient to this caregiver"
+          }
+        },
+        {
+          "name": "Delete Patient",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}"]
+            },
+            "description": "Delete/remove a patient (owner deletes completely, caregiver removes assignment)"
+          }
+        },
+        {
+          "name": "Get Adherence Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/adherence?days=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "adherence"],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Get adherence overview across all patients"
+          }
+        },
+        {
+          "name": "Get Patient Adherence",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}/adherence?days=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}", "adherence"],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Get adherence trends for a specific patient"
+          }
+        },
+        {
+          "name": "Get Patient Today's Medications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}/medications/today",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}", "medications", "today"]
+            },
+            "description": "Get today's medications for a specific patient"
+          }
+        },
+        {
+          "name": "Get Patient All Medications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}/medications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}", "medications"]
+            },
+            "description": "Get all medications for a patient (active, upcoming, past)"
+          }
+        },
+        {
+          "name": "Add Patient Medication",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lisinopril\",\n  \"genericName\": \"Lisinopril\",\n  \"dosage\": \"10mg\",\n  \"frequency\": \"once daily\",\n  \"scheduleTimes\": [\"09:00 AM\"],\n  \"isOngoing\": true,\n  \"startDate\": \"2024-04-09\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}/medications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}", "medications"]
+            },
+            "description": "Add a new medication for a patient"
+          }
+        },
+        {
+          "name": "Mark Patient Dose Taken",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doseIndex\": 0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}/medications/{{medication_id}}/taken",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}", "medications", "{{medication_id}}", "taken"]
+            },
+            "description": "Toggle a patient's dose as taken/untaken"
+          }
+        },
+        {
+          "name": "Update Patient Medication",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lisinopril\",\n  \"genericName\": \"Lisinopril\",\n  \"dosage\": \"10mg\",\n  \"frequency\": \"once daily\",\n  \"scheduleTimes\": [\"08:30 AM\"],\n  \"isOngoing\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}/medications/{{medication_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}", "medications", "{{medication_id}}"]
+            },
+            "description": "Update a patient's medication"
+          }
+        },
+        {
+          "name": "Stop Patient Medication",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}/medications/{{medication_id}}/stop",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}", "medications", "{{medication_id}}", "stop"]
+            },
+            "description": "Stop/discontinue a patient's medication"
+          }
+        },
+        {
+          "name": "Delete Patient Medication",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/patients/{{patient_id}}/medications/{{medication_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "patients", "{{patient_id}}", "medications", "{{medication_id}}"]
+            },
+            "description": "Permanently delete a patient's medication"
+          }
+        },
+        {
+          "name": "Search Drugs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/caregiver/drugs?q=lisinopril&skip=0&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "caregiver", "drugs"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "lisinopril"
+                },
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Search OpenFDA for drugs"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only endpoints for system management",
+      "item": [
+        {
+          "name": "Get Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "stats"]
+            },
+            "description": "Get system statistics (total caregivers, patients, users)"
+          }
+        },
+        {
+          "name": "Get All Caregivers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/caregivers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "caregivers"]
+            },
+            "description": "List all caregivers with patient count"
+          }
+        },
+        {
+          "name": "Update Caregiver",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\",\n  \"email\": \"jane.doe@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/caregivers/{{caregiver_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "caregivers", "{{caregiver_id}}"]
+            },
+            "description": "Update caregiver information"
+          }
+        },
+        {
+          "name": "Update Caregiver Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/caregivers/{{caregiver_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "caregivers", "{{caregiver_id}}", "status"]
+            },
+            "description": "Update caregiver status (active, pending, rejected)"
+          }
+        },
+        {
+          "name": "Delete Caregiver",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/caregivers/{{caregiver_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "caregivers", "{{caregiver_id}}"]
+            },
+            "description": "Delete a caregiver account"
+          }
+        },
+        {
+          "name": "Get All Patients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/patients",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "patients"]
+            },
+            "description": "List all patients with medication and caregiver counts"
+          }
+        },
+        {
+          "name": "Update Patient",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\",\n  \"email\": \"jane.smith@example.com\",\n  \"dateOfBirth\": \"1965-05-20\",\n  \"notes\": \"Updated notes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/patients/{{patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "patients", "{{patient_id}}"]
+            },
+            "description": "Update patient information"
+          }
+        },
+        {
+          "name": "Delete Patient",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/patients/{{patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "patients", "{{patient_id}}"]
+            },
+            "description": "Delete a patient and all associated data"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat Service",
+      "description": "AI chat and text-to-speech endpoints",
+      "item": [
+        {
+          "name": "Send Chat Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What are the side effects of my medications?\",\n  \"mode\": \"fda\"\n}"
+            },
+            "url": {
+              "raw": "{{chat_url}}/api/chat",
+              "host": ["{{chat_url}}"],
+              "path": ["api", "chat"]
+            },
+            "description": "Send a message to SafeDose AI. Modes: 'fda' (MongoDB + FDA), 'mydata' (MongoDB only), 'web' (web search)"
+          }
+        },
+        {
+          "name": "Convert Text to Speech",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Remember to take your medication at 9 AM\"\n}"
+            },
+            "url": {
+              "raw": "{{chat_url}}/api/tts",
+              "host": ["{{chat_url}}"],
+              "path": ["api", "tts"]
+            },
+            "description": "Convert text to speech audio (returns WAV format)"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string",
+      "description": "Backend API base URL"
+    },
+    {
+      "key": "chat_url",
+      "value": "http://localhost:3002",
+      "type": "string",
+      "description": "Chat service base URL"
+    },
+    {
+      "key": "token",
+      "value": "your_jwt_token_here",
+      "type": "string",
+      "description": "JWT authentication token (obtained from login)"
+    },
+    {
+      "key": "patient_id",
+      "value": "patient_object_id",
+      "type": "string",
+      "description": "ID of the patient (MongoDB ObjectId)"
+    },
+    {
+      "key": "medication_id",
+      "value": "medication_object_id",
+      "type": "string",
+      "description": "ID of the medication (MongoDB ObjectId)"
+    },
+    {
+      "key": "caregiver_id",
+      "value": "caregiver_object_id",
+      "type": "string",
+      "description": "ID of the caregiver user (MongoDB ObjectId)"
+    }
+  ]
+}

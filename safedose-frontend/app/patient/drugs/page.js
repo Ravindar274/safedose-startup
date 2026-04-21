@@ -1,9 +1,8 @@
-// app/caregiver/drugs/page.js
-
 'use client';
-import './drugs.css';
-import '../../patient/patient-dashboard.css';
-import '../../patient/medications/medications.css';
+
+import '../../caregiver/drugs/drugs.css';
+import '../patient-dashboard.css';
+import '../medications/medications.css';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 
@@ -20,13 +19,13 @@ const FREQUENCIES = [
 ];
 
 const FREQ_COUNT = {
-  'once daily':        1,
-  'twice daily':       2,
+  'once daily': 1,
+  'twice daily': 2,
   'three times daily': 3,
-  'four times daily':  4,
+  'four times daily': 4,
   'once every 2 days': 1,
   'once every 3 days': 1,
-  'once in a week':    1,
+  'once in a week': 1,
 };
 
 function cleanDrugText(value) {
@@ -40,10 +39,7 @@ function getDrugDisplayName(drug) {
   const brandName = cleanDrugText(drug?.brandName);
   const genericName = cleanDrugText(drug?.genericName);
 
-  if (brandName && brandName.toLowerCase() !== 'unknown') {
-    return brandName;
-  }
-
+  if (brandName && brandName.toLowerCase() !== 'unknown') return brandName;
   return genericName;
 }
 
@@ -51,30 +47,29 @@ function hasDrugDisplayName(drug) {
   return !!getDrugDisplayName(drug);
 }
 
-// ── Time helpers ──────────────────────────────────────────────
 function toInputTime(timeStr) {
   if (!timeStr) return '08:00';
   if (timeStr.includes(':') && !timeStr.includes(' ')) return timeStr;
   const [t, p] = timeStr.split(' ');
-  let [h, m]   = t.split(':').map(Number);
+  let [h, m] = t.split(':').map(Number);
   if (p === 'PM' && h !== 12) h += 12;
-  if (p === 'AM' && h === 12) h  = 0;
+  if (p === 'AM' && h === 12) h = 0;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 function fromInputTime(val) {
   if (!val) return '08:00 AM';
   let [h, m] = val.split(':').map(Number);
-  const p    = h >= 12 ? 'PM' : 'AM';
-  const dh   = h % 12 || 12;
+  const p = h >= 12 ? 'PM' : 'AM';
+  const dh = h % 12 || 12;
   return `${String(dh).padStart(2, '0')}:${String(m).padStart(2, '0')} ${p}`;
 }
 
 function generateTimes(firstTime, count) {
   const [t, p] = (firstTime || '08:00 AM').split(' ');
-  let [h, m]   = t.split(':').map(Number);
+  let [h, m] = t.split(':').map(Number);
   if (p === 'PM' && h !== 12) h += 12;
-  if (p === 'AM' && h === 12) h  = 0;
+  if (p === 'AM' && h === 12) h = 0;
   const interval = Math.floor(24 / count);
   return Array.from({ length: count }, (_, i) => {
     const curH = (h + i * interval) % 24;
@@ -84,8 +79,7 @@ function generateTimes(firstTime, count) {
   });
 }
 
-// ── Add Medication Modal ──────────────────────────────────────
-function AddMedModal({ drug, patients, onClose, onSaved }) {
+function AddMedModal({ drug, onClose, onSaved }) {
   const {
     register,
     handleSubmit,
@@ -95,28 +89,25 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
     formState: { errors, isSubmitting },
   } = useForm({
     defaultValues: {
-      patientId:     patients[0]?._id ?? '',
-      dosage:        '',
-      frequency:     'once daily',
+      dosage: '',
+      frequency: 'once daily',
       scheduleTimes: ['08:00 AM'],
-      isOngoing:     true,
-      startDate:     new Date().toISOString().slice(0, 10),
-      endDate:       '',
+      isOngoing: true,
+      startDate: new Date().toISOString().slice(0, 10),
+      endDate: '',
     },
   });
 
   const [apiError, setApiError] = useState('');
-
-  const frequency     = watch('frequency');
-  const isOngoing     = watch('isOngoing');
+  const frequency = watch('frequency');
+  const isOngoing = watch('isOngoing');
   const scheduleTimes = watch('scheduleTimes');
 
-  // Regenerate schedule times when frequency changes
   const prevFreqRef = useRef(frequency);
   useEffect(() => {
     if (prevFreqRef.current === frequency) return;
     prevFreqRef.current = frequency;
-    const count     = FREQ_COUNT[frequency] || 1;
+    const count = FREQ_COUNT[frequency] || 1;
     const firstTime = getValues('scheduleTimes')?.[0] || '08:00 AM';
     setValue('scheduleTimes', generateTimes(firstTime, count));
   }, [frequency, getValues, setValue]);
@@ -124,13 +115,13 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
   function handleTimeChange(idx, inputVal) {
     if (!inputVal) return;
     const formatted = fromInputTime(inputVal);
-    const count     = FREQ_COUNT[frequency] || 1;
+    const count = FREQ_COUNT[frequency] || 1;
     if (idx === 0 && count > 1) {
       setValue('scheduleTimes', generateTimes(formatted, count));
     } else {
-      const current    = getValues('scheduleTimes');
-      const newTimes   = [...current];
-      newTimes[idx]    = formatted;
+      const current = getValues('scheduleTimes');
+      const newTimes = [...current];
+      newTimes[idx] = formatted;
       setValue('scheduleTimes', newTimes);
     }
   }
@@ -141,20 +132,23 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
       const displayName = getDrugDisplayName(drug);
       const genericName = cleanDrugText(drug.genericName) || displayName;
       const payload = {
-        name:          displayName,
-        genericName,
-        dosage:        formData.dosage,
-        frequency:     formData.frequency,
+        selectedDrug: {
+          brandName: displayName,
+          genericName,
+          rxcui: drug.rxcui || '',
+        },
+        dosage: formData.dosage,
+        frequency: formData.frequency,
         scheduleTimes: formData.scheduleTimes,
-        isOngoing:     formData.isOngoing,
-        startDate:     formData.startDate,
-        endDate:       !formData.isOngoing ? formData.endDate : undefined,
+        isOngoing: formData.isOngoing,
+        startDate: formData.startDate,
+        endDate: !formData.isOngoing ? formData.endDate : undefined,
       };
 
-      const res  = await fetch(`/api/caregiver/patients/${formData.patientId}/medications`, {
-        method:  'POST',
+      const res = await fetch('/api/patient/medications', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
 
@@ -176,11 +170,10 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
-
+      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <h3 className="modal-title">Add to patient</h3>
+            <h3 className="modal-title">Add medication</h3>
             <p className="modal-sub">
               <strong style={{ textTransform: 'capitalize' }}>{displayName.toLowerCase()}</strong>
               {genericName && brandName.toLowerCase() !== 'unknown' && (
@@ -197,21 +190,6 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)}>
-
-          {/* Patient */}
-          <div className="form-grp">
-            <label>Patient *</label>
-            <select {...register('patientId', { required: true })}>
-              {patients.map(p => (
-                <option key={p._id} value={p._id}>
-                  {p.firstName} {p.lastName}
-                </option>
-              ))}
-            </select>
-            {errors.patientId && <span className="form-error">Please select a patient.</span>}
-          </div>
-
-          {/* Dosage + Frequency */}
           <div className="form-row-2">
             <div className="form-grp">
               <label>Dosage *</label>
@@ -224,12 +202,11 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
             <div className="form-grp">
               <label>Frequency *</label>
               <select {...register('frequency')}>
-                {FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}
+                {FREQUENCIES.map((f) => <option key={f} value={f}>{f}</option>)}
               </select>
             </div>
           </div>
 
-          {/* Schedule times */}
           <div className="form-grp">
             <label>Schedule times *</label>
             <div className="drug-times-grid">
@@ -238,13 +215,12 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
                   key={idx}
                   type="time"
                   value={toInputTime(time)}
-                  onChange={e => handleTimeChange(idx, e.target.value)}
+                  onChange={(e) => handleTimeChange(idx, e.target.value)}
                 />
               ))}
             </div>
           </div>
 
-          {/* Start + End date */}
           <div className="form-row-2">
             <div className="form-grp">
               <label>Start date</label>
@@ -256,7 +232,7 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
                 <input
                   type="date"
                   {...register('endDate', {
-                    validate: v => isOngoing || !!v || 'End date is required.',
+                    validate: (v) => isOngoing || !!v || 'End date is required.',
                   })}
                 />
                 {errors.endDate && <span className="form-error">{errors.endDate.message}</span>}
@@ -264,7 +240,6 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
             )}
           </div>
 
-          {/* Ongoing checkbox */}
           <div className="form-grp form-grp-check">
             <input id="mod-ongoing" type="checkbox" {...register('isOngoing')} />
             <label htmlFor="mod-ongoing">Ongoing medication (no end date)</label>
@@ -281,7 +256,6 @@ function AddMedModal({ drug, patients, onClose, onSaved }) {
   );
 }
 
-// ── Drug Card ─────────────────────────────────────────────────
 function DrugCard({ drug, onAdd }) {
   const displayName = getDrugDisplayName(drug);
   const genericName = cleanDrugText(drug.genericName);
@@ -325,35 +299,23 @@ function DrugCard({ drug, onAdd }) {
           <line x1="12" y1="5" x2="12" y2="19"/>
           <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
-        Add to patient
+        Add to my meds
       </button>
     </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────
-export default function DrugDirectory() {
-  const [query,           setQuery]           = useState('');
-  const [debouncedQuery,  setDebouncedQuery]  = useState('');
-  const [drugs,           setDrugs]           = useState([]);
-  const [total,           setTotal]           = useState(0);
-  const [skip,            setSkip]            = useState(0);
-  const [loading,         setLoading]         = useState(false);
-  const [fetchError,      setFetchError]      = useState('');
-  const [patients,        setPatients]        = useState([]);
-  const [modal,           setModal]           = useState(null);
-  const [successMsg,      setSuccessMsg]      = useState('');
-  const [noPatientError,  setNoPatientError]  = useState(false);
+export default function PatientDrugDirectory() {
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [drugs, setDrugs] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [skip, setSkip] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState('');
+  const [modal, setModal] = useState(null);
+  const [successMsg, setSuccessMsg] = useState('');
 
-  // Fetch caregiver's patient roster once
-  useEffect(() => {
-    fetch('/api/caregiver/patients')
-      .then(r => r.json())
-      .then(data => setPatients(data.patients || []))
-      .catch(() => {});
-  }, []);
-
-  // Debounce search query (350 ms); reset skip when query changes
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(query);
@@ -362,18 +324,20 @@ export default function DrugDirectory() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Fetch drugs whenever debouncedQuery or skip changes
   const fetchDrugs = useCallback(async (q, s) => {
     setLoading(true);
     setFetchError('');
     try {
       const params = new URLSearchParams({ skip: String(s), limit: String(PAGE_SIZE) });
       if (q) params.set('q', q);
-      const res  = await fetch(`/api/caregiver/drugs?${params}`);
+      const res = await fetch(`/api/patient/drugs?${params}`);
       const data = await res.json();
-      if (!res.ok) { setFetchError(data.error || 'Failed to load drugs.'); return; }
-      setDrugs(data.drugs  || []);
-      setTotal(data.total  || 0);
+      if (!res.ok) {
+        setFetchError(data.error || 'Failed to load drugs.');
+        return;
+      }
+      setDrugs(data.drugs || []);
+      setTotal(data.total || 0);
     } catch {
       setFetchError('Could not reach the server.');
     } finally {
@@ -386,18 +350,8 @@ export default function DrugDirectory() {
   }, [debouncedQuery, skip, fetchDrugs]);
 
   const visibleDrugs = drugs.filter(hasDrugDisplayName);
-
-  const page     = Math.floor(skip / PAGE_SIZE) + 1;
+  const page = Math.floor(skip / PAGE_SIZE) + 1;
   const maxPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  function handleAdd(drug) {
-    if (!patients.length) {
-      setNoPatientError(true);
-      setTimeout(() => setNoPatientError(false), 4000);
-      return;
-    }
-    setModal(drug);
-  }
 
   function handleSaved() {
     setSuccessMsg('Medication added successfully!');
@@ -406,17 +360,14 @@ export default function DrugDirectory() {
 
   return (
     <>
-      {/* ── Topbar ── */}
       <div className="app-topbar">
         <div className="topbar-title">
           <h2>Drug Directory</h2>
-          <p>Browse FDA-registered medications and add them to a patient</p>
+          <p>Browse FDA-registered medications and add them to your profile</p>
         </div>
       </div>
 
       <main className="app-main">
-
-        {/* ── Search bar ── */}
         <div className="drug-search-bar">
           <div className="search-box" style={{ flex: 1, maxWidth: 500 }}>
             <span className="search-icon">
@@ -430,7 +381,7 @@ export default function DrugDirectory() {
               type="text"
               placeholder="Search by brand name or generic name…"
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
             />
           </div>
           {!loading && total > 0 && (
@@ -438,7 +389,6 @@ export default function DrugDirectory() {
           )}
         </div>
 
-        {/* ── Success banner ── */}
         {successMsg && (
           <div className="drug-success-banner">
             <svg stroke="currentColor" fill="none" strokeWidth="2.5" viewBox="0 0 24 24"
@@ -449,30 +399,12 @@ export default function DrugDirectory() {
           </div>
         )}
 
-        {/* ── No-patient warning ── */}
-        {noPatientError && (
-          <div className="drug-success-banner" style={{ background: '#fef3c7', color: '#92400e', borderColor: '#fbbf24' }}>
-            <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
-                 strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-            You have no patients yet. Add a patient from the dashboard first.
-          </div>
-        )}
+        {loading && <div className="drug-loading">Loading medications…</div>}
 
-        {/* ── Loading ── */}
-        {loading && (
-          <div className="drug-loading">Loading medications…</div>
-        )}
-
-        {/* ── Error ── */}
         {!loading && fetchError && (
           <p className="form-error" style={{ marginBottom: 16 }}>{fetchError}</p>
         )}
 
-        {/* ── Empty state ── */}
         {!loading && !fetchError && visibleDrugs.length === 0 && (
           <div className="drug-empty">
             <div className="drug-empty-icon">
@@ -489,7 +421,6 @@ export default function DrugDirectory() {
           </div>
         )}
 
-        {/* ── Cards grid ── */}
         {!loading && visibleDrugs.length > 0 && (
           <>
             <div className="drug-grid">
@@ -497,16 +428,15 @@ export default function DrugDirectory() {
                 <DrugCard
                   key={drug.id && drug.brandName && drug.genericName ? drug.id + drug.brandName + drug.genericName : `${skip}-${idx}`}
                   drug={drug}
-                  onAdd={handleAdd}
+                  onAdd={setModal}
                 />
               ))}
             </div>
 
-            {/* ── Pagination ── */}
             <div className="drug-pagination">
               <button
                 className="btn btn-ghost"
-                onClick={() => setSkip(s => Math.max(0, s - PAGE_SIZE))}
+                onClick={() => setSkip((s) => Math.max(0, s - PAGE_SIZE))}
                 disabled={skip <= 0}
               >
                 <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
@@ -520,7 +450,7 @@ export default function DrugDirectory() {
 
               <button
                 className="btn btn-ghost"
-                onClick={() => setSkip(s => s + PAGE_SIZE)}
+                onClick={() => setSkip((s) => s + PAGE_SIZE)}
                 disabled={skip + PAGE_SIZE >= total}
               >
                 Next
@@ -532,14 +462,11 @@ export default function DrugDirectory() {
             </div>
           </>
         )}
-
       </main>
 
-      {/* ── Add medication modal ── */}
       {modal && (
         <AddMedModal
           drug={modal}
-          patients={patients}
           onClose={() => setModal(null)}
           onSaved={handleSaved}
         />

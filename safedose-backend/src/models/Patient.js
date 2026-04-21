@@ -16,7 +16,7 @@ const PatientSchema = new mongoose.Schema(
     },
     firstName:   { type: String, required: true, trim: true },
     lastName:    { type: String, required: true, trim: true },
-    email:       { type: String, trim: true, lowercase: true, default: null, sparse: true },
+    email:       { type: String, trim: true, lowercase: true, index: true, unique: true, sparse: true, default: null },
     dateOfBirth: { type: Date,   default: null },
     gender:      { type: String, default: '' },
     notes:       { type: String, default: '' },
@@ -34,7 +34,5 @@ const PatientSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-PatientSchema.index({ email: 1 }, { unique: true, sparse: true });
 
 export default mongoose.models.Patient || mongoose.model('Patient', PatientSchema);

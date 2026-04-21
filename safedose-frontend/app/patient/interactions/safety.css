@@ -1,0 +1,146 @@
+.safety-muted {
+  margin: 0;
+  color: var(--gray400);
+  font-size: 13px;
+}
+
+.safety-empty {
+  padding: 18px;
+  border: 1px dashed var(--gray200);
+  border-radius: 12px;
+  background: var(--gray50);
+}
+
+.safety-empty h4 {
+  margin: 0 0 6px;
+  color: var(--navy);
+  font-size: 15px;
+}
+
+.safety-empty p {
+  margin: 0;
+  color: var(--gray500);
+  font-size: 13px;
+}
+
+.safety-list {
+  display: grid;
+  gap: 12px;
+}
+
+.safety-item {
+  border: 1px solid var(--gray200);
+  border-left: 5px solid var(--gray300);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #fff;
+}
+
+.safety-item--high {
+  border-left-color: var(--danger);
+  background: #fff7f7;
+}
+
+.safety-item--medium {
+  border-left-color: var(--warn);
+  background: #fffbf2;
+}
+
+.safety-item--low {
+  border-left-color: var(--teal);
+  background: #f4fbfb;
+}
+
+.safety-item-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.safety-item-head h4 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 14px;
+}
+
+.safety-item p {
+  margin: 0;
+  color: var(--gray600);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.safety-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.safety-pill--high {
+  color: #7f1d1d;
+  background: #fecaca;
+}
+
+.safety-pill--medium {
+  color: #92400e;
+  background: #fde68a;
+}
+
+.safety-pill--low {
+  color: #134e4a;
+  background: #99f6e4;
+}
+
+.safety-med-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.safety-med-card {
+  border: 1px solid var(--gray200);
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+}
+
+.safety-med-card h4 {
+  margin: 0 0 4px;
+  color: var(--navy);
+  font-size: 14px;
+}
+
+.safety-med-card p {
+  margin: 0;
+  color: var(--gray500);
+  font-size: 12px;
+}
+
+.safety-med-meta {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.safety-med-meta span {
+  background: var(--gray100);
+  color: var(--gray700);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+.safety-tag {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+
+.safety-disclaimer {
+  margin: 2px 2px 0;
+  color: var(--gray400);
+  font-size: 12px;
+}
