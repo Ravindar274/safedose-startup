@@ -1,21 +1,38 @@
-// src/lib/gemini.js
-
 import fetch from 'node-fetch';
+import { GoogleAuth } from 'google-auth-library';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const PROJECT_ID = 'safedose-medtracker';
+const LOCATION   = 'us-central1';
+
+const auth = new GoogleAuth({
+  keyFile: path.resolve(__dirname, '../../config/safedose-medtracker.json'),
+  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+});
+
+async function getAuthHeader() {
+  const client = await auth.getClient();
+  const token  = await client.getAccessToken();
+  return { Authorization: `Bearer ${token.token}` };
+}
+
+function vertexUrl(model) {
+  return `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${model}:generateContent`;
+}
 
 // ── Lightweight drug name extractor — used for FDA mode ───────────────────
 export async function extractDrugNames(text) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return [];
-
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const model  = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
   const prompt = `List only the drug or medication names mentioned in this text. Return a comma-separated list of names only, with no explanation. If no drugs are mentioned, return the single word "none".\n\nText: "${text}"`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
   try {
-    const res = await fetch(url, {
+    const authHeader = await getAuthHeader();
+    const res = await fetch(vertexUrl(model), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader },
       signal: AbortSignal.timeout(8000),
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -25,7 +42,7 @@ export async function extractDrugNames(text) {
 
     if (!res.ok) return [];
 
-    const json = await res.json();
+    const json   = await res.json();
     const result = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
 
     if (!result || result.toLowerCase() === 'none') return [];
@@ -36,11 +53,7 @@ export async function extractDrugNames(text) {
 }
 
 export async function callGemini(prompt) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY is not configured in .env');
-
   const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const body = JSON.stringify({
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -52,18 +65,16 @@ export async function callGemini(prompt) {
     },
   });
 
-  // Retry up to 3 times on 503 (model overloaded) with exponential back-off
   const MAX_RETRIES = 3;
   let lastErr;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    if (attempt > 0) {
-      await new Promise(r => setTimeout(r, 1000 * attempt)); // 1s, 2s
-    }
+    if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
 
-    const res = await fetch(url, {
+    const authHeader = await getAuthHeader();
+    const res = await fetch(vertexUrl(model), {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader },
       signal:  AbortSignal.timeout(30000),
       body,
     });
@@ -71,7 +82,7 @@ export async function callGemini(prompt) {
     if (res.status === 503) {
       const err = await res.text();
       lastErr = new Error(`Gemini error 503: ${err.slice(0, 300)}`);
-      continue; // retry
+      continue;
     }
 
     if (!res.ok) {
@@ -90,11 +101,7 @@ export async function callGemini(prompt) {
 
 // ── Web search mode — uses Gemini's built-in Google Search grounding ───────
 export async function callGeminiWithSearch(message) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY is not configured in .env');
-
   const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const prompt = `You are SafeDose AI, a helpful and responsible medication safety assistant.
 The user is asking: "${message}"
@@ -120,9 +127,10 @@ Cite the source of key facts where possible (e.g. "According to Mayo Clinic...")
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
 
-    const res = await fetch(url, {
+    const authHeader = await getAuthHeader();
+    const res = await fetch(vertexUrl(model), {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader },
       signal:  AbortSignal.timeout(30000),
       body,
     });

@@ -2,7 +2,26 @@
 
 import express from 'express';
 import fetch from 'node-fetch';
+import { GoogleAuth } from 'google-auth-library';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { requireAuth } from '../middleware/authMiddleware.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const PROJECT_ID = 'safedose-medtracker';
+const LOCATION   = 'us-central1';
+
+const auth = new GoogleAuth({
+  keyFile: path.resolve(__dirname, '../../config/safedose-medtracker.json'),
+  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+});
+
+async function getAuthHeader() {
+  const client = await auth.getClient();
+  const token = await client.getAccessToken();
+  return { Authorization: `Bearer ${token.token}` };
+}
 
 const router = express.Router();
 
@@ -38,12 +57,6 @@ function pcmToWav(pcmBuffer, sampleRate = 24000) {
 
 // ── Gemini TTS ─────────────────────────────────────────────────────────
 async function generateTTS(text) {
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('Missing GEMINI_API_KEY');
-  }
-
   const payload = {
     contents: [
       {
@@ -60,16 +73,17 @@ async function generateTTS(text) {
         }
       }
     },
-    model: "gemini-2.5-flash-preview-tts"
   };
 
+  const authHeader = await getAuthHeader();
+  const ttsModel   = 'gemini-2.5-flash-preview-tts';
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+    `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${ttsModel}:generateContent`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(8000), // fail fast → browser TTS fallback kicks in immediately
+      signal: AbortSignal.timeout(8000),
     }
   );
 
