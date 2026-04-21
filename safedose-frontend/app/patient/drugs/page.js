@@ -129,9 +129,14 @@ function AddMedModal({ drug, onClose, onSaved }) {
   async function onSubmit(formData) {
     setApiError('');
     try {
+      const displayName = getDrugDisplayName(drug);
+      const genericName = cleanDrugText(drug.genericName) || displayName;
       const payload = {
-        name: drug.brandName,
-        genericName: drug.genericName || drug.brandName,
+        selectedDrug: {
+          brandName: displayName,
+          genericName,
+          rxcui: drug.rxcui || '',
+        },
         dosage: formData.dosage,
         frequency: formData.frequency,
         scheduleTimes: formData.scheduleTimes,
