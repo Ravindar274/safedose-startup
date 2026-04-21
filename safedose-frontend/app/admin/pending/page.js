@@ -2,14 +2,14 @@
 
 'use client';
 import '../admin.css';
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 function initials(first, last) {
   return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase();
 }
 
-export default function AdminPendingPage() {
+function AdminPendingPageContent() {
   const searchParams = useSearchParams();
   const [caregivers, setCaregivers] = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -161,5 +161,13 @@ export default function AdminPendingPage() {
         </div>
       </main>
     </>
+  );
+}
+
+export default function AdminPendingPage() {
+  return (
+    <Suspense fallback={<main className="app-main"><div className="admin-empty">Loading…</div></main>}>
+      <AdminPendingPageContent />
+    </Suspense>
   );
 }

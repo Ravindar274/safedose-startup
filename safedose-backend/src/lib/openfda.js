@@ -59,12 +59,52 @@ function getInteractionSnippet(text, term) {
   const token = String(term || '').toLowerCase();
   if (!source) return '';
 
+  const maxLen = 280;
   const idx = source.toLowerCase().indexOf(token);
-  if (idx < 0) return source.slice(0, 220);
 
-  const start = Math.max(0, idx - 80);
-  const end = Math.min(source.length, idx + token.length + 120);
-  return source.slice(start, end);
+  // No match for the token: return a clean intro snippet.
+  if (idx < 0) {
+    return source.length <= maxLen ? source : `${source.slice(0, maxLen)}...`;
+  }
+
+  const tokenEnd = idx + token.length;
+  const leftPart = source.slice(0, idx);
+  const rightPart = source.slice(tokenEnd);
+
+  // Prefer sentence-like boundaries around the match.
+  const leftBoundary = Math.max(
+    leftPart.lastIndexOf('. '),
+    leftPart.lastIndexOf('! '),
+    leftPart.lastIndexOf('? '),
+    leftPart.lastIndexOf('; ')
+  );
+  const rightCandidates = [
+    rightPart.indexOf('. '),
+    rightPart.indexOf('! '),
+    rightPart.indexOf('? '),
+    rightPart.indexOf('; '),
+  ].filter((v) => v >= 0);
+
+  let start = leftBoundary >= 0 ? leftBoundary + 2 : Math.max(0, idx - 120);
+  let end = rightCandidates.length
+    ? tokenEnd + Math.min(...rightCandidates) + 1
+    : Math.min(source.length, tokenEnd + 160);
+
+  // Keep snippet compact while preserving a whole phrase around the match.
+  if (end - start > maxLen) {
+    const half = Math.floor(maxLen / 2);
+    start = Math.max(0, idx - half);
+    end = Math.min(source.length, tokenEnd + half);
+  }
+
+  // Avoid chopping words at either boundary.
+  while (start > 0 && /[a-z0-9]/i.test(source[start - 1])) start -= 1;
+  while (end < source.length && /[a-z0-9]/i.test(source[end])) end += 1;
+
+  const snippet = source.slice(start, end).trim();
+  const prefix = start > 0 ? '... ' : '';
+  const suffix = end < source.length ? ' ...' : '';
+  return `${prefix}${snippet}${suffix}`;
 }
 
 async function fetchDrugInteractionLabelBlocks(term, apiKey) {

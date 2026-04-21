@@ -17,6 +17,21 @@ const FREQUENCIES = [
   'once in a week'
 ];
 
+function cleanDrugText(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getDrugDisplayName(drug) {
+  const brandName = cleanDrugText(drug?.brandName);
+  const genericName = cleanDrugText(drug?.genericName);
+
+  if (brandName && brandName.toLowerCase() !== 'unknown') return brandName;
+  return genericName;
+}
+
 function parseTime(timeStr) {
   if (!timeStr) return null;
   const [t, period] = timeStr.split(' ');
@@ -197,7 +212,7 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
   }
 
   function handleDrugSelect(drug) {
-    setBrandQuery(drug.brandName);
+    setBrandQuery(getDrugDisplayName(drug));
     setShowResults(false);
     setError('');
     setForm(prev => ({ ...prev, selectedDrug: drug }));
@@ -207,13 +222,21 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
     e.preventDefault();
     setError('');
 
+    if (!form.selectedDrug) {
+      setError('Please select a medication from the FDA search results.');
+      return;
+    }
+
     setLoading(true);
     try {
+      const name = getDrugDisplayName(form.selectedDrug);
+      const genericName = cleanDrugText(form.selectedDrug.genericName) || name;
       const res  = await fetch(`/api/caregiver/patients/${patientId}/medications`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          selectedDrug: form.selectedDrug,
+          name,
+          genericName,
           dosage: form.dosage,
           frequency: form.frequency,
           scheduleTimes: form.scheduleTimes,
@@ -267,19 +290,19 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
                 <div className="drug-lookup-header">Choose a medication from the FDA results below.</div>
                 {searchLoading ? (
                   <div className="drug-lookup-row drug-lookup-row--muted">Searching FDA results…</div>
-                ) : searchResults.filter(drug => drug.brandName && drug.genericName).length > 0 ? (
+                  ) : searchResults.filter(drug => getDrugDisplayName(drug)).length > 0 ? (
                   searchResults
-                    .filter(drug => drug.brandName && drug.genericName)
+                      .filter(drug => getDrugDisplayName(drug))
                     .map(drug => (
                       <button
-                        key={`${drug.id}-${drug.brandName}-${drug.genericName}`}
+                          key={`${drug.id}-${getDrugDisplayName(drug)}-${cleanDrugText(drug.genericName)}`}
                         type="button"
                         className="drug-lookup-row"
                         onClick={() => handleDrugSelect(drug)}
                       >
-                        <span className="drug-lookup-title">{drug.brandName}</span>
+                          <span className="drug-lookup-title">{getDrugDisplayName(drug)}</span>
                         <span className="drug-lookup-sub">
-                          {drug.genericName}
+                            {cleanDrugText(drug.genericName) || getDrugDisplayName(drug)}
                         </span>
                       </button>
                     ))
@@ -293,7 +316,7 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
           <div className="form-grp">
             <label>Generic name *</label>
             <input
-              value={form.selectedDrug?.genericName || ''}
+              value={cleanDrugText(form.selectedDrug?.genericName) || getDrugDisplayName(form.selectedDrug) || ''}
               placeholder="Selected automatically from FDA"
               readOnly
             />
