@@ -15,7 +15,7 @@ const nextConfig = {
       },
       {
         source:      '/chatservice/:path*',
-        destination: `${chatBaseUrl}/chatservice/:path*`,
+        destination: `${process.env.CHAT_PROXY_URL || 'http://localhost:5002'}/:path*`,
       },
     ];
   },
