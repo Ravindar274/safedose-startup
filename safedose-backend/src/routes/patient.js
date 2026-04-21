@@ -10,7 +10,7 @@ import Assignment       from '../models/Assignment.js';
 import CaregiverRequest from '../models/CaregiverRequest.js';
 import CaregiverProfile from '../models/CaregiverProfile.js';
 import { getPatientAdherenceSummary } from '../lib/adherence.js';
-import { searchOpenFDADrugs } from '../lib/openfda.js';
+import { searchOpenFDADrugs, findOpenFDAMedicationInteractions } from '../lib/openfda.js';
 import { sendEmail } from '../lib/sendEmail.js';
 
 const router = Router();
@@ -268,6 +268,32 @@ router.get('/medications', async (req, res) => {
   } catch (err) {
     console.error('[GET ALL MEDS]', err);
     return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/patient/interactions/openfda
+// Returns potential interaction pairs inferred from OpenFDA label
+// drug_interactions sections for active medications.
+// ─────────────────────────────────────────────────────────────
+router.get('/interactions/openfda', async (req, res) => {
+  try {
+    const patient = await getOrCreatePatient(req.user.userId);
+    const activeMeds = await Medication.find({
+      patientId: patient._id,
+      status: { $ne: 'stopped' },
+    }).select('_id name genericName');
+
+    const interactions = await findOpenFDAMedicationInteractions(activeMeds);
+
+    return res.json({
+      interactions,
+      activeMedicationCount: activeMeds.length,
+      checkedWithOpenFDA: true,
+    });
+  } catch (err) {
+    console.error('[GET OPENFDA INTERACTIONS]', err);
+    return res.status(502).json({ error: 'OpenFDA interaction check failed.' });
   }
 });
 

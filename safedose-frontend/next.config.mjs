@@ -5,14 +5,17 @@ const nextConfig = {
   // Proxy all /api/* requests to the Express backend so frontend
   // fetch calls like fetch('/api/auth/login') keep working unchanged.
   async rewrites() {
+    const apiBaseUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    const chatBaseUrl = process.env.CHAT_PROXY_URL || process.env.NEXT_PUBLIC_CHAT_PROXY_URL || 'http://localhost:5002';
+
     return [
       {
         source:      '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/:path*`,
+        destination: `${apiBaseUrl}/api/:path*`,
       },
       {
         source:      '/chatservice/:path*',
-        destination: `${process.env.CHAT_PROXY_URL || 'http://localhost:5002'}/chatservice/:path*`,
+        destination: `${chatBaseUrl}/chatservice/:path*`,
       },
     ];
   },

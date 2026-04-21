@@ -100,6 +100,29 @@ router.post('/register', async (req, res) => {
         '👋 Welcome to SafeDose — Account Under Review',
         buildWelcomeCaregiverEmail(firstName, APP_URL)
       ).catch(() => {});
+
+      const admins = await User.find({ role: 'admin', status: 'active' })
+        .select('email firstName lastName')
+        .lean();
+
+      const pendingUrl = `${APP_URL}/admin/pending?search=${encodeURIComponent(email)}`;
+      const notifySubject = `🚨 New caregiver signup pending approval: ${firstName} ${lastName}`;
+      const notifyHtml = buildAdminCaregiverSignupEmail({
+        firstName,
+        lastName,
+        email,
+        qualification,
+        specialization,
+        experienceYears,
+        licenseId,
+        languagesSpoken,
+        pendingUrl,
+      }, APP_URL);
+
+      admins.forEach((admin) => {
+        if (!admin.email) return;
+        sendEmail(admin.email, notifySubject, notifyHtml).catch(() => {});
+      });
     }
 
     return res.status(201).json({ message: 'Account created successfully.', userId: user._id });
@@ -222,6 +245,25 @@ function buildWelcomeCaregiverEmail(firstName, appUrl) {
     </table>
     <p style="margin:0;font-size:13px;color:#6b7280;">Approval typically takes 1–2 business days. If you have questions, contact us through the platform.</p>`;
   return emailShell('Welcome to SafeDose', 'Caregiver Account — Pending Review', body, appUrl);
+}
+
+function buildAdminCaregiverSignupEmail(caregiver, appUrl) {
+  const body = `
+    <p style="margin:0 0 8px;font-size:16px;color:#111827;font-weight:bold;">New caregiver registration requires review</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;">A caregiver has signed up and is waiting for approval.</p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 20px;font-size:13px;color:#374151;">
+      <tr><td style="padding:6px 0;font-weight:bold;">Name:</td><td style="padding:6px 0;">${caregiver.firstName} ${caregiver.lastName}</td></tr>
+      <tr><td style="padding:6px 0;font-weight:bold;">Email:</td><td style="padding:6px 0;">${caregiver.email}</td></tr>
+      <tr><td style="padding:6px 0;font-weight:bold;">Qualification:</td><td style="padding:6px 0;">${caregiver.qualification || '—'}</td></tr>
+      <tr><td style="padding:6px 0;font-weight:bold;">Specialization:</td><td style="padding:6px 0;">${caregiver.specialization || '—'}</td></tr>
+      <tr><td style="padding:6px 0;font-weight:bold;">Experience:</td><td style="padding:6px 0;">${caregiver.experienceYears != null && caregiver.experienceYears !== '' ? `${caregiver.experienceYears} years` : '—'}</td></tr>
+      <tr><td style="padding:6px 0;font-weight:bold;">License ID:</td><td style="padding:6px 0;">${caregiver.licenseId || '—'}</td></tr>
+      <tr><td style="padding:6px 0;font-weight:bold;">Languages:</td><td style="padding:6px 0;">${caregiver.languagesSpoken || '—'}</td></tr>
+    </table>
+    <a href="${caregiver.pendingUrl}" style="display:inline-block;background:#0d9488;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:bold;text-decoration:none;">Review and Approve Caregiver →</a>
+    <p style="margin:14px 0 0;font-size:12px;color:#6b7280;">This link opens Pending Approvals with this caregiver pre-filtered.</p>`;
+
+  return emailShell('Admin Alert', 'New Caregiver Pending Approval', body, `${appUrl}/admin/pending`);
 }
 
 export default router;

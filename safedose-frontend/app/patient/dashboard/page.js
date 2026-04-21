@@ -5,6 +5,7 @@ import '../patient-dashboard.css';
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NotificationBell from '../../components/NotificationBell';
+import Link from 'next/link';
 
 const FREQUENCIES = [
   'once daily',
@@ -796,10 +797,11 @@ export default function PatientDashboard() {
 }
 
 function PatientDashboardInner() {
-  const [medications,        setMedications]        = useState([]);
-  const [loading,            setLoading]            = useState(true);
-  const [showModal,          setShowModal]          = useState(false);
-  const [banner,             setBanner]             = useState('');
+  const [medications,    setMedications]    = useState([]);
+  const [allMedications, setAllMedications] = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [showModal,      setShowModal]      = useState(false);
+  const [banner,         setBanner]         = useState('');
   const searchParams = useSearchParams();
 
   // Show banner when redirected back after accepting/declining a caregiver invitation
@@ -824,6 +826,20 @@ function PatientDashboardInner() {
 
   useEffect(() => { fetchToday(); }, [fetchToday]);
 
+  useEffect(() => {
+    async function fetchAllMeds() {
+      try {
+        const res = await fetch('/api/patient/medications');
+        const data = await res.json();
+        if (!res.ok) return;
+        setAllMedications(data.medications || []);
+      } catch {
+        setAllMedications([]);
+      }
+    }
+    fetchAllMeds();
+  }, []);
+
   async function handleToggleTaken(medId, doseIndex) {
     const res  = await fetch(`/api/patient/medications/${medId}/taken`, {
       method:  'PATCH',
@@ -842,6 +858,16 @@ function PatientDashboardInner() {
 
   function onMedSaved() {
     fetchToday(); // refetch so the new med appears with correct status
+    (async () => {
+      try {
+        const res = await fetch('/api/patient/medications');
+        const data = await res.json();
+        if (!res.ok) return;
+        setAllMedications(data.medications || []);
+      } catch {
+        setAllMedications([]);
+      }
+    })();
   }
 
   // ── Derived stats (dose-level counts, not medication-level) ──
@@ -862,6 +888,17 @@ function PatientDashboardInner() {
   });
 
   const adherencePct = totalDoses > 0 ? Math.round((takenDoses / totalDoses) * 100) : 0;
+  const interactionFlags = allMedications.filter(m => m.status === 'interaction').length;
+  const activeMeds = allMedications.filter(m => m.status !== 'stopped');
+  const duplicateGenerics = (() => {
+    const counts = new Map();
+    activeMeds.forEach((m) => {
+      const key = (m.genericName || m.name || '').trim().toLowerCase();
+      if (!key) return;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return [...counts.values()].filter(v => v > 1).length;
+  })();
 
   return (
     <>
@@ -1016,9 +1053,14 @@ function PatientDashboardInner() {
         <div className="card-box">
           <div className="section-hdr">
             <h3>Safety Center</h3>
+            <Link className="btn" style={{ background: 'var(--gray100)', color: 'var(--gray800)' }} href="/patient/interactions">
+              Open Safety Center
+            </Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--gray400)', margin: 0 }}>
-            No active interaction alerts. Your medications have been reviewed and are safe to take together.
+            {interactionFlags > 0 || duplicateGenerics > 0
+              ? `${interactionFlags} interaction flag${interactionFlags === 1 ? '' : 's'} and ${duplicateGenerics} duplicate ingredient group${duplicateGenerics === 1 ? '' : 's'} detected. Review recommended.`
+              : 'No active interaction or duplicate ingredient alerts detected. Tap Open Safety Center for full checks.'}
           </p>
         </div>
 
