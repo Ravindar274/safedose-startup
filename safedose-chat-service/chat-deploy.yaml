@@ -18,7 +18,7 @@ spec:
           secretName: safedose-sa-key
       containers:
       - name: chat-app
-        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-chat-service-image:v4
+        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-chat-service-image:v5
         ports:
         - containerPort: 8080
         volumeMounts:

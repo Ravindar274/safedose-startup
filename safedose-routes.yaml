@@ -22,13 +22,14 @@ spec:
   - matches:
     - path:
         type: PathPrefix
-        value: /chatservice
-    filters:
-    - type: URLRewrite
-      urlRewrite:
-        path:
-          type: ReplacePrefixMatch
-          replacePrefixMatch: /
+        value: /api/chat
+    backendRefs:
+    - name: chat-service
+      port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api/tts
     backendRefs:
     - name: chat-service
       port: 80
