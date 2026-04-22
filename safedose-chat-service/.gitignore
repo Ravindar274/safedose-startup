@@ -42,3 +42,8 @@ Thumbs.db
 .vercel
 .turbo
 *.tsbuildinfo
+
+
+# ── Config ──────────────────────────────────────────────────────
+config
+safedose-medtracker.json
