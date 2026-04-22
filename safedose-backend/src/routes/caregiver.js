@@ -110,9 +110,11 @@ function doseCount(frequency) {
 }
 
 // ── Helper: compute live stats for a single patient ──────────
-// Returns { missedToday, medsToday }
-// missedToday — doses whose scheduled time has passed but aren't taken
-// medsToday   — number of medications active on today's date
+// Returns { missedToday, dueNow, upcomingToday, medsToday }
+// missedToday   — untaken doses > 30 min past scheduled time
+// dueNow        — untaken doses within 15 min before to 30 min after scheduled
+// upcomingToday — untaken doses > 15 min before scheduled time
+// medsToday     — number of medications active on today's date
 async function computePatientStats(patientId) {
   const now      = new Date();
   const today    = new Date(now);
@@ -127,8 +129,21 @@ async function computePatientStats(patientId) {
     $or: [{ isOngoing: true }, { endDate: { $gte: today } }],
   });
 
-  let missed   = 0;
+  let missed    = 0;
+  let dueNow    = 0;
+  let upcoming  = 0;
   let medsToday = 0;
+
+  function parseScheduledTime(timeStr) {
+    if (!timeStr) return null;
+    const [t, period] = timeStr.split(' ');
+    let [h, m] = t.split(':').map(Number);
+    if (period === 'PM' && h !== 12) h += 12;
+    if (period === 'AM' && h === 12) h  = 0;
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+  }
 
   for (const med of medications) {
     // Filter out interval-frequency meds not due today
@@ -148,17 +163,20 @@ async function computePatientStats(patientId) {
 
     times.forEach((timeStr, i) => {
       if (takenSet.has(i) || !timeStr) return;
-      const [t, period] = timeStr.split(' ');
-      let [h, m] = t.split(':').map(Number);
-      if (period === 'PM' && h !== 12) h += 12;
-      if (period === 'AM' && h === 12) h  = 0;
-      const scheduled = new Date();
-      scheduled.setHours(h, m, 0, 0);
-      if (now >= scheduled) missed++;
+      const scheduled = parseScheduledTime(timeStr);
+      if (!scheduled || now < scheduled) { upcoming++; return; }
+
+      // now >= scheduled — check if next dose time has also passed (same logic as patient detail page)
+      const nextScheduled = parseScheduledTime(times[i + 1]);
+      if (nextScheduled && now >= nextScheduled) {
+        missed++;
+      } else {
+        dueNow++;
+      }
     });
   }
 
-  return { missedToday: missed, medsToday };
+  return { missedToday: missed, dueNow, upcomingToday: upcoming, medsToday };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -175,11 +193,13 @@ router.get('/patients', async (req, res) => {
       assignments
         .filter(a => a.patientId)
         .map(async (a) => {
-          const { missedToday, medsToday } = await computePatientStats(a.patientId._id);
+          const { missedToday, dueNow, upcomingToday, medsToday } = await computePatientStats(a.patientId._id);
           return {
             ...a.patientId.toObject(),
             assignmentRole: a.role,
             missedToday,
+            dueNow,
+            upcomingToday,
             medsToday,
           };
         })

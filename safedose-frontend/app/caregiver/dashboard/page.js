@@ -12,8 +12,10 @@ function initials(first, last) {
 }
 
 function statusOf(patient) {
-  if (patient.missedToday > 0)  return 'warning';
-  if (patient.medsToday === 0)  return 'no-meds';
+  if (patient.missedToday > 0)    return 'missed';
+  if (patient.dueNow > 0)         return 'due-now';
+  if (patient.upcomingToday > 0)  return 'upcoming';
+  if (patient.medsToday === 0)    return 'no-meds';
   return 'on-track';
 }
 
@@ -231,16 +233,16 @@ function CaregiverDashboardInner() {
   }
 
   // ── Derived stats ──
-  // medsToday: active medications for today (from backend live computation)
-  // missedToday: doses overdue and not taken (from backend live computation)
   const total        = patients.length;
-  const onTrack      = patients.filter(p => p.medsToday > 0 && p.missedToday === 0).length;
-  const missed       = patients.filter(p => p.missedToday > 0).length;
-  const noMeds       = patients.filter(p => p.medsToday === 0).length;
+  const onTrack      = patients.filter(p => statusOf(p) === 'on-track').length;
+  const missed       = patients.filter(p => statusOf(p) === 'missed').length;
+  const noMeds       = patients.filter(p => statusOf(p) === 'no-meds').length;
   const adherencePct = total > 0 ? Math.round((onTrack / total) * 100) : 0;
 
-  const missedPatients  = patients.filter(p => p.missedToday > 0);
-  const onTrackPatients = patients.filter(p => p.missedToday === 0);
+  const missedPatients   = patients.filter(p => statusOf(p) === 'missed');
+  const dueNowPatients   = patients.filter(p => statusOf(p) === 'due-now');
+  const upcomingPatients = patients.filter(p => statusOf(p) === 'upcoming');
+  const onTrackPatients  = patients.filter(p => statusOf(p) === 'on-track' || statusOf(p) === 'no-meds');
 
   return (
     <>
@@ -347,7 +349,6 @@ function CaregiverDashboardInner() {
             <p style={{ color: 'var(--gray400)', fontSize: 13, padding: '20px 0' }}>No patients yet. Click &quot;Add patient&quot; to get started.</p>
           ) : (
             <>
-              {/* Missed doses section */}
               {missedPatients.length > 0 && (
                 <>
                   <p className="roster-section-lbl">Missed Doses</p>
@@ -357,7 +358,24 @@ function CaregiverDashboardInner() {
                 </>
               )}
 
-              {/* On track section */}
+              {dueNowPatients.length > 0 && (
+                <>
+                  <p className="roster-section-lbl">Due Now</p>
+                  {dueNowPatients.map(p => (
+                    <PatientRow key={p._id} patient={p} onDelete={p => setRemoveTarget(p)} />
+                  ))}
+                </>
+              )}
+
+              {upcomingPatients.length > 0 && (
+                <>
+                  <p className="roster-section-lbl">Upcoming</p>
+                  {upcomingPatients.map(p => (
+                    <PatientRow key={p._id} patient={p} onDelete={p => setRemoveTarget(p)} />
+                  ))}
+                </>
+              )}
+
               {onTrackPatients.length > 0 && (
                 <>
                   <p className="roster-section-lbl">On Track</p>
@@ -446,16 +464,24 @@ function PatientRow({ patient, onDelete }) {
           {patient.medsToday > 0
             ? `${patient.medsToday} medication${patient.medsToday !== 1 ? 's' : ''} today`
             : 'none scheduled today'}
-          {patient.missedToday > 0 && ` · ${patient.missedToday} dose${patient.missedToday !== 1 ? 's' : ''} missed`}
+          {patient.missedToday > 0   && ` · ${patient.missedToday} missed`}
+          {patient.dueNow > 0        && ` · ${patient.dueNow} due now`}
+          {patient.upcomingToday > 0 && ` · ${patient.upcomingToday} upcoming`}
         </span>
       </div>
       <div className="patient-actions">
         <span className={`status-badge ${
-          status === 'warning'  ? 'status-missed' :
-          status === 'no-meds' ? 'status-upcoming' :
+          status === 'missed'   ? 'status-missed'   :
+          status === 'due-now'  ? 'status-due'      :
+          status === 'upcoming' ? 'status-upcoming' :
+          status === 'no-meds'  ? 'status-upcoming' :
           'status-taken'
         }`}>
-          {status === 'warning' ? 'Missed doses' : status === 'no-meds' ? 'Not scheduled' : 'On track'}
+          {status === 'missed'   ? 'Missed'         :
+           status === 'due-now'  ? 'Due now'         :
+           status === 'upcoming' ? 'Upcoming'        :
+           status === 'no-meds'  ? 'Not scheduled'   :
+           'On track'}
         </span>
         <button className="icon-btn icon-btn-del" onClick={(e) => { e.stopPropagation(); onDelete(patient); }} title="Remove patient">
           <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24"
