@@ -13,7 +13,8 @@ const PROJECT_ID = 'safedose-medtracker';
 const LOCATION   = 'us-central1';
 
 const auth = new GoogleAuth({
-  keyFile: path.resolve(__dirname, '../../config/safedose-medtracker.json'),
+  keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS
+    || path.resolve(__dirname, '../../config/safedose-medtracker.json'),
   scopes: ['https://www.googleapis.com/auth/cloud-platform'],
 });
 

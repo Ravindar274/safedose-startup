@@ -12,27 +12,31 @@ spec:
       labels:
         app: chat
     spec:
+      volumes:
+      - name: sa-key-volume
+        secret:
+          secretName: safedose-sa-key
       containers:
       - name: chat-app
-        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-chat-service-image:v3
+        image: us-central1-docker.pkg.dev/safedose-medtracker/safedose-node-apps-repo/safedose-chat-service-image:v4
         ports:
         - containerPort: 8080
+        volumeMounts:
+        - name: sa-key-volume
+          mountPath: /secrets
+          readOnly: true
         env:
         - name: PORT
           value: "8080"
         - name: NODE_ENV
           value: "production"
-        # Add any other .env variables your chat service needs here
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/secrets/key.json"
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:
               name: safedose-secrets
               key: MONGODB_URI
-        - name: GEMINI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: safedose-secrets
-              key: GEMINI_API_KEY
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
@@ -43,14 +47,13 @@ spec:
         - name: CLIENT_ORIGIN
           value: "https://safedose-jet.vercel.app"
 
-
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: chat-service
 spec:
-  type: ClusterIP 
+  type: ClusterIP
   selector:
     app: chat
   ports:

@@ -112,7 +112,7 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
       setSearchLoading(true);
       try {
         const params = new URLSearchParams({ q: query, limit: '8', skip: '0' });
-        const res = await fetch(`/api/patient/drugs?${params}`, { signal: controller.signal });
+        const res = await fetch(`/api/caregiver/drugs?${params}`, { signal: controller.signal });
         const data = await res.json();
         if (!res.ok) {
           setSearchResults([]);
@@ -222,15 +222,12 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
     e.preventDefault();
     setError('');
 
-    if (!form.selectedDrug) {
-      setError('Please select a medication from the FDA search results.');
-      return;
-    }
-
     setLoading(true);
     try {
-      const name = getDrugDisplayName(form.selectedDrug);
-      const genericName = cleanDrugText(form.selectedDrug.genericName) || name;
+      const name = form.selectedDrug ? getDrugDisplayName(form.selectedDrug) : brandQuery.trim();
+      const genericName = form.selectedDrug
+        ? (cleanDrugText(form.selectedDrug.genericName) || name)
+        : (form.manualGenericName?.trim() || name);
       const res  = await fetch(`/api/caregiver/patients/${patientId}/medications`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -275,10 +272,10 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
 
         <form onSubmit={handleSubmit}>
           <div className="form-grp form-grp--lookup" ref={lookupRef} style={{ gridColumn: '1 / -1' }}>
-            <label>Brand name *</label>
+            <label>Medication name *</label>
             <input
               name="brandName"
-              placeholder="Search brand name, e.g. Tylenol"
+              placeholder="Search FDA or type a name"
               value={brandQuery}
               onChange={e => handleBrandInput(e.target.value)}
               onFocus={() => setShowResults(true)}
@@ -287,7 +284,6 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
             />
             {showResults && brandQuery.trim() && (
               <div className="drug-lookup-results">
-                <div className="drug-lookup-header">Choose a medication from the FDA results below.</div>
                 {searchLoading ? (
                   <div className="drug-lookup-row drug-lookup-row--muted">Searching FDA results…</div>
                   ) : searchResults.filter(drug => getDrugDisplayName(drug)).length > 0 ? (
@@ -314,11 +310,14 @@ function AddMedicationModal({ patientId, onClose, onSaved }) {
           </div>
 
           <div className="form-grp">
-            <label>Generic name *</label>
+            <label>Generic name</label>
             <input
-              value={cleanDrugText(form.selectedDrug?.genericName) || getDrugDisplayName(form.selectedDrug) || ''}
-              placeholder="Selected automatically from FDA"
-              readOnly
+              value={form.selectedDrug
+                ? (cleanDrugText(form.selectedDrug.genericName) || getDrugDisplayName(form.selectedDrug))
+                : (form.manualGenericName || '')}
+              placeholder={form.selectedDrug ? 'Auto-filled from FDA' : 'Enter generic name (optional)'}
+              readOnly={!!form.selectedDrug}
+              onChange={e => !form.selectedDrug && setForm(prev => ({ ...prev, manualGenericName: e.target.value }))}
             />
           </div>
 

@@ -226,11 +226,15 @@ function AddMedicationModal({ onClose, onSaved }) {
 
     setLoading(true);
     try {
+      const selectedDrug = form.selectedDrug || {
+        brandName:   brandQuery.trim(),
+        genericName: form.manualGenericName?.trim() || brandQuery.trim(),
+      };
       const res  = await fetch('/api/patient/medications', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          selectedDrug: form.selectedDrug,
+          selectedDrug,
           dosage: form.dosage,
           frequency: form.frequency,
           scheduleTimes: form.scheduleTimes,
@@ -269,10 +273,10 @@ function AddMedicationModal({ onClose, onSaved }) {
 
         <form onSubmit={handleSubmit}>
           <div className="form-grp form-grp--lookup" ref={lookupRef} style={{ gridColumn: '1 / -1' }}>
-            <label>Brand name *</label>
+            <label>Medication name *</label>
             <input
               name="brandName"
-              placeholder="Search brand name, e.g. Tylenol"
+              placeholder="Search FDA or type a name"
               value={brandQuery}
               onChange={e => handleBrandInput(e.target.value)}
               onFocus={() => setShowResults(true)}
@@ -281,7 +285,6 @@ function AddMedicationModal({ onClose, onSaved }) {
             />
             {showResults && brandQuery.trim() && (
               <div className="drug-lookup-results">
-                <div className="drug-lookup-header">Choose a medication from the FDA results below.</div>
                 {searchLoading ? (
                   <div className="drug-lookup-row drug-lookup-row--muted">Searching FDA results…</div>
                 ) : searchResults.filter(drug => drug.brandName && drug.genericName).length > 0 ? (
@@ -308,11 +311,12 @@ function AddMedicationModal({ onClose, onSaved }) {
           </div>
 
           <div className="form-grp">
-            <label>Generic name *</label>
+            <label>Generic name</label>
             <input
-              value={form.selectedDrug?.genericName || ''}
-              placeholder="Selected automatically from FDA"
-              readOnly
+              value={form.selectedDrug ? (form.selectedDrug.genericName || '') : (form.manualGenericName || '')}
+              placeholder={form.selectedDrug ? 'Auto-filled from FDA' : 'Enter generic name (optional)'}
+              readOnly={!!form.selectedDrug}
+              onChange={e => !form.selectedDrug && setForm(prev => ({ ...prev, manualGenericName: e.target.value }))}
             />
           </div>
 

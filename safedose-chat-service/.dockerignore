@@ -5,3 +5,5 @@ npm-debug.log
 .env
 dist
 .md
+config
+safedose-medtracker.json
