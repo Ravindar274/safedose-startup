@@ -117,10 +117,17 @@ async function fetchDrugInteractionLabelBlocks(term, apiKey) {
   const searchVal = `(openfda.generic_name:"${safeTerm}" OR openfda.brand_name:"${safeTerm}")`;
   url += `&search=${encodeURIComponent(searchVal)}`;
 
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (response.status === 404) return [];
   if (!response.ok) {
-    throw new Error(`OpenFDA interaction request failed with status ${response.status}`);
+    console.warn(`[OpenFDA interactions] ${safeTerm} returned HTTP ${response.status}`);
+    return [];
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    console.warn(`[OpenFDA interactions] ${safeTerm} returned non-JSON content`);
+    return [];
   }
 
   const data = await response.json();
@@ -235,17 +242,22 @@ export async function findOpenFDAMedicationInteractions(medications = []) {
   const cappedMeds = meds.slice(0, 10);
 
   const interactionBlocksByMedId = new Map();
-  for (const med of cappedMeds) {
-    const primaryTerm = med.genericName || med.name;
-    const secondaryTerm = med.genericName && med.name && med.genericName !== med.name ? med.name : '';
+  await Promise.all(cappedMeds.map(async (med) => {
+    try {
+      const primaryTerm = med.genericName || med.name;
+      const secondaryTerm = med.genericName && med.name && med.genericName !== med.name ? med.name : '';
 
-    const primaryBlocks = await fetchDrugInteractionLabelBlocks(primaryTerm, apiKey);
-    const secondaryBlocks = secondaryTerm
-      ? await fetchDrugInteractionLabelBlocks(secondaryTerm, apiKey)
-      : [];
+      const primaryBlocks = await fetchDrugInteractionLabelBlocks(primaryTerm, apiKey);
+      const secondaryBlocks = secondaryTerm
+        ? await fetchDrugInteractionLabelBlocks(secondaryTerm, apiKey)
+        : [];
 
-    interactionBlocksByMedId.set(med.id, [...primaryBlocks, ...secondaryBlocks]);
-  }
+      interactionBlocksByMedId.set(med.id, [...primaryBlocks, ...secondaryBlocks]);
+    } catch (err) {
+      console.warn(`[OpenFDA interactions] Failed for ${med.genericName || med.name}:`, err.message);
+      interactionBlocksByMedId.set(med.id, []);
+    }
+  }));
 
   const found = new Map();
 
